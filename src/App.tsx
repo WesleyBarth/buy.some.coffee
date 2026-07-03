@@ -26,6 +26,8 @@ import {
   Banknote,
   BarChart3,
   CalendarDays,
+  ChevronLeft,
+  ChevronRight,
   CircleDollarSign,
   CreditCard,
   Landmark,
@@ -51,7 +53,6 @@ import { IncomeView } from './components/recurring/IncomeView'
 import { TransactionsView } from './components/transactions/TransactionsView'
 import {
   accountSignedBalance,
-  isCashflowAccount,
   normalizePlaidBalanceForAccount,
 } from './domain/accounts'
 import {
@@ -80,6 +81,7 @@ import {
   uncategorizedCategoryName,
 } from './domain/defaults'
 import {
+  addMonthsToMonth,
   clampMonthDay,
   currentMonthString,
   formatMonthLabel,
@@ -94,8 +96,10 @@ import {
   summarizeBudgets,
 } from './domain/budgets'
 import { buildMonthPositionTrend, buildSpendByCategory } from './domain/dashboard'
+import { buildMonthlyCashSummary } from './domain/cashflow'
 import { parseCurrency } from './domain/money'
 import { normalizeRecurringCashflow } from './domain/recurring'
+import { isBudgetSpend } from './domain/transactions'
 import type {
   Account,
   AccountType,
@@ -116,6 +120,7 @@ import type {
   TransactionColumnVisibility,
   TransactionMatchRule,
   TransactionPatch,
+  TransactionRole,
 } from './domain/types'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
 
@@ -168,7 +173,7 @@ function App() {
   const [storedActiveView, setActiveView] = useLocalStorageState('finance.activeView', 'dashboard')
   const activeView = isKnownView(storedActiveView) ? storedActiveView : 'dashboard'
   const [sidebarCollapsed, setSidebarCollapsed] = useLocalStorageState('finance.sidebarCollapsed', false)
-  const [currentMonth, setCurrentMonth] = useState(currentMonthString())
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthString())
   const [localAccounts, setLocalAccounts] = useLocalStorageState('finance.accounts', initialAccounts)
   const [localCategories, setLocalCategories] = useLocalStorageState('finance.categories', initialCategories)
   const [localTags, setLocalTags] = useLocalStorageState('finance.tags', initialTags)
@@ -222,7 +227,7 @@ function App() {
       source: false,
     },
   )
-  const [showCurrentMonthTransactions, setShowCurrentMonthTransactions] = useState(false)
+  const [showSelectedMonthTransactions, setShowSelectedMonthTransactions] = useState(false)
   const [importAccountId, setImportAccountId] = useState('')
   const [accountForm, setAccountForm] = useState({
     name: '',
@@ -234,6 +239,8 @@ function App() {
     name: '',
     color: categoryPalette[0],
     type: 'expense' as Category['type'],
+    parentId: '',
+    role: '' as TransactionRole | '',
     budgetable: true,
   })
   const [tagForm, setTagForm] = useState({
@@ -322,12 +329,6 @@ function App() {
     })
   }, [isRemoteSignedIn, setLocalCategories])
 
-  useEffect(() => {
-    const updateMonth = () => setCurrentMonth(currentMonthString())
-    updateMonth()
-    const interval = window.setInterval(updateMonth, 60 * 1000)
-    return () => window.clearInterval(interval)
-  }, [])
   const activeTags = tags.filter((tag) => !tag.isArchived)
   const categoryLabels =
     activeCategories.length > 0
@@ -420,11 +421,11 @@ function App() {
         .from('accounts')
         .select('id,name,account_type,balance,institution,is_archived')
         .order('created_at'),
-      remoteEnabled.from('categories').select('id,name,color,category_type,budgetable,is_archived').order('name'),
+      remoteEnabled.from('categories').select('id,name,color,category_type,parent_id,role,budgetable,is_archived').order('name'),
       remoteEnabled.from('tags').select('id,name,color,is_archived').order('name'),
       remoteEnabled
         .from('transactions')
-        .select('id,transaction_date,account_id,description,amount,source,external_id,categories(name)')
+        .select('id,transaction_date,account_id,description,amount,source,external_id,pending_external_id,original_description,role,transfer_group_id,modeled_outcome,categories(name)')
         .order('transaction_date', { ascending: false }),
       remoteEnabled.from('transaction_tags').select('transaction_id,tag_id'),
       remoteEnabled.from('budgets').select('id,month,planned,categories(name)').order('month'),
@@ -442,7 +443,7 @@ function App() {
         .order('snapshot_date'),
       remoteEnabled
         .from('plaid_accounts')
-        .select('plaid_item_id,plaid_account_id,name,official_name,account_type,account_subtype,mask,available_balance,current_balance,limit_amount,iso_currency_code,linked_account_id,last_balance_sync_at,plaid_items(institution_name)')
+        .select('plaid_item_id,plaid_account_id,name,official_name,account_type,account_subtype,mask,available_balance,current_balance,limit_amount,iso_currency_code,linked_account_id,last_balance_sync_at,accepted_balance,accepted_balance_at,accepted_transactions_cursor,reconciliation_status,plaid_items(institution_name)')
         .order('created_at'),
     ])
 
@@ -481,6 +482,8 @@ function App() {
         name: row.name,
         color: row.color,
         type: row.category_type ?? 'expense',
+        parentId: row.parent_id ?? undefined,
+        role: row.role ?? undefined,
         budgetable: Boolean(row.budgetable),
         isArchived: Boolean(row.is_archived),
       })),
@@ -511,6 +514,11 @@ function App() {
         amount: Number(row.amount),
         source: row.source,
         externalId: row.external_id ?? undefined,
+        pendingExternalId: row.pending_external_id ?? undefined,
+        originalDescription: row.original_description ?? undefined,
+        role: row.role ?? undefined,
+        transferGroupId: row.transfer_group_id ?? undefined,
+        modeledOutcome: row.modeled_outcome ?? undefined,
         tagIds: tagIdsByTransactionId.get(row.id) ?? [],
       })),
     )
@@ -574,6 +582,10 @@ function App() {
         isoCurrencyCode: row.iso_currency_code ?? undefined,
         linkedAccountId: row.linked_account_id ?? undefined,
         lastBalanceSyncAt: row.last_balance_sync_at ?? undefined,
+        acceptedBalance: row.accepted_balance === null ? null : Number(row.accepted_balance),
+        acceptedBalanceAt: row.accepted_balance_at ?? undefined,
+        acceptedTransactionsCursor: row.accepted_transactions_cursor ?? undefined,
+        reconciliationStatus: row.reconciliation_status ?? undefined,
       })),
     )
     setRemoteDataLoaded(true)
@@ -588,11 +600,11 @@ function App() {
     return () => window.clearTimeout(timeout)
   }, [remoteEnabled, session, loadRemoteData])
 
-  const currentMonthTransactions = useMemo(
-    () => transactions.filter((transaction) => transaction.date.startsWith(currentMonth)),
-    [currentMonth, transactions],
+  const selectedMonthTransactions = useMemo(
+    () => transactions.filter((transaction) => transaction.date.startsWith(selectedMonth)),
+    [selectedMonth, transactions],
   )
-  const displayedTransactions = showCurrentMonthTransactions ? currentMonthTransactions : transactions
+  const displayedTransactions = showSelectedMonthTransactions ? selectedMonthTransactions : transactions
   const plaidInstitutionCount = useMemo(
     () => new Set(plaidAccounts.map((account) => account.institutionName).filter(Boolean)).size,
     [plaidAccounts],
@@ -633,22 +645,15 @@ function App() {
   }, [accounts, plaidAccounts])
 
   const cashflowTransactions = useMemo(
-    () => currentMonthTransactions.filter((transaction) => transaction.category !== transferCategoryName),
-    [currentMonthTransactions],
+    () => selectedMonthTransactions.filter((transaction) => transaction.category !== transferCategoryName),
+    [selectedMonthTransactions],
   )
   const variableTransactions = useMemo(
     () =>
-      cashflowTransactions.filter((transaction) => {
-        const category = activeCategoryByName.get(transaction.category)
-        return (
-          !isProjectionCategory(transaction.category) &&
-          transaction.category !== transferCategoryName &&
-          category?.type !== 'income' &&
-          category?.type !== 'transfer' &&
-          category?.budgetable !== false
-        )
-      }),
-    [activeCategoryByName, cashflowTransactions],
+      cashflowTransactions.filter((transaction) =>
+        !isProjectionCategory(transaction.category) && isBudgetSpend(transaction, activeCategories),
+      ),
+    [activeCategories, cashflowTransactions],
   )
 
   const activeExpectedCashflows = useMemo(
@@ -684,18 +689,11 @@ function App() {
     .filter((item) => item.amount > 0)
     .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name))
   const remainingExpectedProjectionFlow = activeExpectedCashflows
-    .filter((item) => nextRecurringDueDate(item).startsWith(currentMonth))
+    .filter((item) => selectedMonth === currentMonthString() && nextRecurringDueDate(item).startsWith(selectedMonth))
     .reduce((sum, item) => sum + item.amount, 0)
   const expectedExpenseSpend = monthlyRecurringSpend + subscriptionServicesSpend
 
   const accountInitialValue = activeAccounts.reduce((sum, account) => sum + accountSignedBalance(account), 0)
-  const cashflowAccounts = activeAccounts.filter(isCashflowAccount)
-  const currentCashPosition = cashflowAccounts.reduce((sum, account) => sum + accountSignedBalance(account), 0)
-  const cashflowAccountIds = new Set(cashflowAccounts.map((account) => account.id))
-  const currentMonthCashflowActivity = cashflowTransactions
-    .filter((transaction) => cashflowAccountIds.has(transaction.accountId))
-    .reduce((sum, transaction) => sum + transaction.amount, 0)
-  const monthStartCashPosition = currentCashPosition - currentMonthCashflowActivity
   const latestSnapshot = snapshots.at(-1)
   const latestNetWorth = latestSnapshot
     ? latestSnapshot.assets - latestSnapshot.liabilities
@@ -711,33 +709,34 @@ function App() {
     return () => window.clearTimeout(timeout)
   }, [expectedMonthlyRecurringExpenseItems, expectedSubscriptionItems, pendingRecurringFocusId])
 
-  const spendByCategory = buildSpendByCategory(categoryLabels, variableTransactions)
+  const spendByCategory = buildSpendByCategory(categoryLabels, variableTransactions, activeCategories)
 
   const budgetRows = buildBudgetRows({
     budgetableCategories,
     budgets,
-    currentMonth,
+    categories: activeCategories,
+    currentMonth: selectedMonth,
     variableTransactions,
     normalizeCategoryId: normalizeText,
   })
-  const budgetRowsWithDrafts = applyBudgetDrafts(budgetRows, budgetDrafts, currentMonth)
+  const budgetRowsWithDrafts = applyBudgetDrafts(budgetRows, budgetDrafts, selectedMonth)
   const budgetSummary = summarizeBudgets(budgetRowsWithDrafts)
   const {
     totalBudgetRemaining,
     remainingPlannedSpend,
   } = budgetSummary
-  const actualVariableSpend = Math.abs(
-    variableTransactions
-      .filter((transaction) => transaction.amount < 0)
-      .reduce((sum, transaction) => sum + transaction.amount, 0),
-  )
-  const trackedMonthEndPosition = currentCashPosition + remainingExpectedProjectionFlow - remainingPlannedSpend
-  const projectedSavings = trackedMonthEndPosition - monthStartCashPosition
-  const savingsGoalVariance = projectedSavings - monthlySavingsGoal
+  const actualVariableSpend = variableTransactions.reduce((sum, transaction) => sum - transaction.amount, 0)
+  const monthlyCashSummary = buildMonthlyCashSummary({
+    accounts: activeAccounts,
+    monthlySavingsGoal,
+    remainingExpectedProjectionFlow,
+    remainingPlannedVariableSpend: remainingPlannedSpend,
+    selectedMonthTransactions,
+  })
 
   const monthPositionTrend = buildMonthPositionTrend({
-    currentCashPosition,
-    projectedMonthEndPosition: trackedMonthEndPosition,
+    currentCashPosition: monthlyCashSummary.cashOnHand,
+    projectedMonthEndPosition: monthlyCashSummary.projectedMonthEndCashBalance,
   })
 
   const netWorthTrend = snapshots.map((snapshot) => ({
@@ -771,6 +770,7 @@ function App() {
           description,
           amount,
           source: 'manual',
+          role: undefined,
           dedupe_key: transactionDedupeKey(selectedTransactionAccountId, newTransaction.date, amount, description),
         },
         { onConflict: 'user_id,dedupe_key' },
@@ -824,6 +824,11 @@ function App() {
             transaction_date: next.date,
             description: next.description.trim(),
             amount: next.amount,
+            role: next.role,
+            transfer_group_id: next.transferGroupId,
+            pending_external_id: next.pendingExternalId,
+            original_description: next.originalDescription,
+            modeled_outcome: next.modeledOutcome,
             dedupe_key: transactionDedupeKey(next.accountId, next.date, next.amount, next.description),
           })
           .eq('id', transactionId)
@@ -926,7 +931,7 @@ function App() {
     const nextPlanned = Math.max(0, planned)
 
     if (remoteEnabled && session) {
-      const budget = budgets.find((item) => item.month === currentMonth && item.category === category)
+      const budget = budgets.find((item) => item.month === selectedMonth && item.category === category)
       const categoryId = await ensureRemoteCategory(category)
       if (budget) {
         setRemoteBudgets((current) =>
@@ -944,7 +949,7 @@ function App() {
             {
               user_id: session.user.id,
               category_id: categoryId,
-              month: `${currentMonth}-01`,
+              month: `${selectedMonth}-01`,
               planned: nextPlanned,
             },
             { onConflict: 'user_id,category_id,month' },
@@ -956,7 +961,7 @@ function App() {
           throw error
         }
         setRemoteBudgets((current) => [
-          ...current.filter((item) => !(item.month === currentMonth && item.category === category)),
+          ...current.filter((item) => !(item.month === selectedMonth && item.category === category)),
           {
             id: data.id,
             month: String(data.month).slice(0, 7),
@@ -967,15 +972,15 @@ function App() {
       }
     } else {
       setLocalBudgets((current) =>
-        current.some((budget) => budget.month === currentMonth && budget.category === category)
+        current.some((budget) => budget.month === selectedMonth && budget.category === category)
           ? current.map((budget) =>
-              budget.month === currentMonth && budget.category === category ? { ...budget, planned: nextPlanned } : budget,
+              budget.month === selectedMonth && budget.category === category ? { ...budget, planned: nextPlanned } : budget,
             )
           : [
               ...current,
               {
                 id: crypto.randomUUID(),
-                month: currentMonth,
+                month: selectedMonth,
                 category,
                 planned: nextPlanned,
               },
@@ -985,7 +990,7 @@ function App() {
   }
 
   async function saveBudgetDraft(category: string) {
-    const key = budgetDraftKey(currentMonth, category)
+    const key = budgetDraftKey(selectedMonth, category)
     const draft = budgetDrafts[key]
     const planned = draft === undefined || draft.trim() === '' ? 0 : Number(draft)
 
@@ -1704,6 +1709,9 @@ function App() {
           amount: row.amount,
           source: 'bank_api',
           external_id: row.plaidTransactionId,
+          pending_external_id: row.pendingTransactionId,
+          original_description: row.originalDescription ?? null,
+          modeled_outcome: 'import',
           dedupe_key: transactionDedupeKey(row.accountId, row.date, row.amount, row.description),
           notes: row.originalDescription ? `Plaid original: ${row.originalDescription}` : null,
         })),
@@ -1738,6 +1746,8 @@ function App() {
           name,
           color: categoryForm.color,
           category_type: categoryForm.type,
+          parent_id: categoryForm.parentId || null,
+          role: categoryForm.role || null,
           budgetable: categoryForm.budgetable,
           is_archived: false,
         },
@@ -1756,13 +1766,15 @@ function App() {
           name,
           color: categoryForm.color,
           type: categoryForm.type,
+          parentId: categoryForm.parentId || undefined,
+          role: categoryForm.role || undefined,
           budgetable: categoryForm.budgetable,
           isArchived: false,
         },
       ])
     }
 
-    setCategoryForm({ name: '', color: categoryPalette[0], type: 'expense', budgetable: true })
+    setCategoryForm({ name: '', color: categoryPalette[0], type: 'expense', parentId: '', role: '', budgetable: true })
   }
 
   async function updateCategory(categoryId: string, patch: Partial<Category>) {
@@ -1776,6 +1788,8 @@ function App() {
           name: patch.name,
           color: patch.color,
           category_type: patch.type,
+          parent_id: patch.parentId === undefined ? null : patch.parentId,
+          role: patch.role === undefined ? null : patch.role,
           budgetable: patch.budgetable,
           is_archived: patch.isArchived,
         })
@@ -2032,10 +2046,13 @@ function App() {
       header={
         <Header
           actions={
-            <Button disabled={activeAccounts.length === 0} onClick={() => setActiveView('transactions')} size="sm">
-              <Plus size={18} />
-              Add transaction
-            </Button>
+            <Inline align="center" gap="xs" wrap>
+              <MonthSelector onMonthChange={setSelectedMonth} selectedMonth={selectedMonth} />
+              <Button disabled={activeAccounts.length === 0} onClick={() => setActiveView('transactions')} size="sm">
+                <Plus size={18} />
+                Add transaction
+              </Button>
+            </Inline>
           }
           brand={
             <Inline align="center" gap="sm">
@@ -2049,7 +2066,7 @@ function App() {
               </IconButton>
               <Stack gap="none">
                 <Text as="span" size="xs" tone="muted" weight="bold">
-                  {formatMonthLabel(currentMonth)}
+                  {formatMonthLabel(selectedMonth)}
                 </Text>
                 <Text as="h1" size="xl" weight="bold">
                   {viewTitle(activeView)}
@@ -2075,15 +2092,16 @@ function App() {
               <DashboardView
                 activeCategoryByName={activeCategoryByName}
                 actualVariableSpend={actualVariableSpend}
-                cashflowAccounts={cashflowAccounts}
-                currentCashPosition={currentCashPosition}
+                cashflowAccounts={monthlyCashSummary.cashflowScopedAccounts}
+                currentCashPosition={monthlyCashSummary.cashOnHand}
                 monthPositionTrend={monthPositionTrend}
                 onOpenAccounts={() => setActiveView('accounts')}
                 remainingPlannedSpend={remainingPlannedSpend}
-                savingsGoalVariance={savingsGoalVariance}
+                savingsGoalVariance={monthlyCashSummary.savingsGoalVariance}
                 spendByCategory={spendByCategory}
                 totalBudgetRemaining={totalBudgetRemaining}
-                trackedMonthEndPosition={trackedMonthEndPosition}
+                trackedMonthEndPosition={monthlyCashSummary.projectedMonthEndCashBalance}
+                unpaidCreditCardLiability={monthlyCashSummary.unpaidCreditCardLiability}
               />
             )}
 
@@ -2155,13 +2173,13 @@ function App() {
                 activeTags={activeTags}
                 categoryLabels={categoryLabels}
                 columnVisibility={transactionColumns}
-                currentMonthLabel={formatMonthLabel(currentMonth)}
+                selectedMonthLabel={formatMonthLabel(selectedMonth)}
                 displayedTransactions={displayedTransactions}
-                isCurrentMonthOnly={showCurrentMonthTransactions}
+                isSelectedMonthOnly={showSelectedMonthTransactions}
                 newTransaction={newTransaction}
                 onAddTransaction={addTransaction}
                 onColumnVisibilityChange={setTransactionColumns}
-                onCurrentMonthOnlyChange={setShowCurrentMonthTransactions}
+                onSelectedMonthOnlyChange={setShowSelectedMonthTransactions}
                 onDeleteTransaction={deleteTransaction}
                 onNewTransactionChange={setNewTransaction}
                 onOpenAccounts={() => setActiveView('accounts')}
@@ -2232,11 +2250,11 @@ function App() {
             {activeView === 'budgets' && (
               <BudgetsView
                 budgetDrafts={budgetDrafts}
-                currentMonth={currentMonth}
+                currentMonth={selectedMonth}
                 onDraftChange={(category, value) =>
                   setBudgetDrafts((current) => ({
                     ...current,
-                    [budgetDraftKey(currentMonth, category)]: value,
+                    [budgetDraftKey(selectedMonth, category)]: value,
                   }))
                 }
                 onSaveBudget={(category) => {
@@ -2344,6 +2362,51 @@ function AuthScreen({
       </Panel>
       <NoticeToast message={notice} onDismiss={dismissNotice} />
     </AppShell>
+  )
+}
+
+function MonthSelector({
+  onMonthChange,
+  selectedMonth,
+}: {
+  onMonthChange: (month: string) => void
+  selectedMonth: string
+}) {
+  const currentCalendarMonth = currentMonthString()
+  const isCurrentMonth = selectedMonth === currentCalendarMonth
+
+  return (
+    <Inline align="center" gap="xs" wrap>
+      <IconButton
+        label="Previous month"
+        onClick={() => onMonthChange(addMonthsToMonth(selectedMonth, -1))}
+        size="sm"
+        variant="ghost"
+      >
+        <ChevronLeft size={16} />
+      </IconButton>
+      <Input
+        aria-label="Selected month"
+        inputSize="sm"
+        onChange={(event) => {
+          if (event.target.value) onMonthChange(event.target.value)
+        }}
+        type="month"
+        value={selectedMonth}
+      />
+      <IconButton
+        label="Next month"
+        onClick={() => onMonthChange(addMonthsToMonth(selectedMonth, 1))}
+        size="sm"
+        variant="ghost"
+      >
+        <ChevronRight size={16} />
+      </IconButton>
+      <Button disabled={isCurrentMonth} onClick={() => onMonthChange(currentCalendarMonth)} size="sm">
+        <CalendarDays size={16} />
+        Current
+      </Button>
+    </Inline>
   )
 }
 

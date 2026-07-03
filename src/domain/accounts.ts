@@ -8,6 +8,22 @@ export function normalizePlaidBalanceForAccount(balance: number, accountType: Ac
   return accountType === 'credit' || accountType === 'loan' ? -Math.abs(balance) : balance
 }
 
+export function isCashOnHandAccount(account: Pick<Account, 'type'>) {
+  return account.type === 'checking' || account.type === 'cash'
+}
+
+export function isSavingsAccount(account: Pick<Account, 'type'>) {
+  return account.type === 'savings'
+}
+
+export function isCreditLiabilityAccount(account: Pick<Account, 'type'>) {
+  return account.type === 'credit'
+}
+
+export function isCashflowScopedAccount(account: Pick<Account, 'type'>) {
+  return account.type === 'checking' || account.type === 'cash' || account.type === 'savings' || account.type === 'credit'
+}
+
 export function isCashflowAccount(account: Pick<Account, 'type'>) {
   return account.type !== 'investment'
 }

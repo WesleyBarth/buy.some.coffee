@@ -46,12 +46,12 @@ type TransactionTableProps = {
   categories: Category[]
   categoryLabels: string[]
   columnVisibility: TransactionColumnVisibility
-  currentMonthLabel: string
-  isCurrentMonthOnly: boolean
+  selectedMonthLabel: string
+  isSelectedMonthOnly: boolean
   newTransaction: TransactionDraft
   onAddTransaction: () => void
   onColumnVisibilityChange: (next: TransactionColumnVisibility) => void
-  onCurrentMonthOnlyChange: (next: boolean) => void
+  onSelectedMonthOnlyChange: (next: boolean) => void
   onDeleteTransaction: (transactionId: string) => void
   onNewTransactionChange: (transaction: TransactionDraft) => void
   onUpdateTransaction: (transactionId: string, patch: TransactionPatch) => void
@@ -68,13 +68,13 @@ export function TransactionTable({
   categories,
   categoryLabels,
   columnVisibility,
-  currentMonthLabel,
-  isCurrentMonthOnly,
+  selectedMonthLabel,
+  isSelectedMonthOnly,
   newTransaction,
   onAddTransaction,
   onDeleteTransaction,
   onColumnVisibilityChange,
-  onCurrentMonthOnlyChange,
+  onSelectedMonthOnlyChange,
   onNewTransactionChange,
   onUpdateTransaction,
   selectedAccountId,
@@ -115,7 +115,7 @@ export function TransactionTable({
         <TableToolbar>
           <Text size="sm" tone="muted">
             {transactions.length}
-            {isCurrentMonthOnly ? ` of ${totalTransactionCount}` : ''} entries
+            {isSelectedMonthOnly ? ` of ${totalTransactionCount}` : ''} entries
           </Text>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -126,11 +126,11 @@ export function TransactionTable({
             <DropdownMenuContent align="end">
               <DropdownMenuLabel>Filter</DropdownMenuLabel>
               <DropdownMenuCheckboxItem
-                checked={isCurrentMonthOnly}
-                onCheckedChange={(checked) => onCurrentMonthOnlyChange(checked === true)}
+                checked={isSelectedMonthOnly}
+                onCheckedChange={(checked) => onSelectedMonthOnlyChange(checked === true)}
                 onSelect={(event) => event.preventDefault()}
               >
-                Current month ({currentMonthLabel})
+                Selected month ({selectedMonthLabel})
               </DropdownMenuCheckboxItem>
               <DropdownMenuSeparator />
               <DropdownMenuLabel>Columns</DropdownMenuLabel>

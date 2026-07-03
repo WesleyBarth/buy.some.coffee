@@ -22,12 +22,15 @@ import {
   ToolbarGroup,
 } from '@hyperview/ui'
 import { ChevronDown, Plus, Save } from 'lucide-react'
-import type { Category, Tag } from '../../domain/types'
+import { categoryAndDescendantIds, resolveCategoryRole } from '../../domain/categories'
+import type { Category, Tag, TransactionRole } from '../../domain/types'
 
 export type CategoryFormState = {
   name: string
   color: string
   type: Category['type']
+  parentId: string
+  role: TransactionRole | ''
   budgetable: boolean
 }
 
@@ -99,6 +102,19 @@ export function CategoriesView({
                   value={categoryForm.name}
                 />
                 <Select
+                  aria-label="Parent category"
+                  onChange={(event) => onCategoryFormChange({ ...categoryForm, parentId: event.target.value })}
+                  selectSize="sm"
+                  value={categoryForm.parentId}
+                >
+                  <option value="">No parent</option>
+                  {categories
+                    .filter((category) => !category.isArchived)
+                    .map((category) => (
+                      <option key={category.id} value={category.id}>{category.name}</option>
+                    ))}
+                </Select>
+                <Select
                   aria-label="Category type"
                   onChange={(event) =>
                     onCategoryFormChange({ ...categoryForm, type: event.target.value as Category['type'] })
@@ -109,6 +125,19 @@ export function CategoriesView({
                   <option value="expense">expense</option>
                   <option value="income">income</option>
                   <option value="transfer">transfer</option>
+                </Select>
+                <Select
+                  aria-label="Category role"
+                  onChange={(event) =>
+                    onCategoryFormChange({ ...categoryForm, role: event.target.value as TransactionRole | '' })
+                  }
+                  selectSize="sm"
+                  value={categoryForm.role}
+                >
+                  <option value="">inherit role</option>
+                  {transactionRoleOptions.map((role) => (
+                    <option key={role.value} value={role.value}>{role.label}</option>
+                  ))}
                 </Select>
                 <Input
                   aria-label="Category color"
@@ -134,7 +163,9 @@ export function CategoriesView({
                 <TableHead>
                   <TableRow>
                     <TableHeaderCell>Name</TableHeaderCell>
+                    <TableHeaderCell>Parent</TableHeaderCell>
                     <TableHeaderCell>Type</TableHeaderCell>
+                    <TableHeaderCell>Role</TableHeaderCell>
                     <TableHeaderCell>Color</TableHeaderCell>
                     <TableHeaderCell>Budgetable</TableHeaderCell>
                     <TableHeaderCell>Archived</TableHeaderCell>
@@ -145,6 +176,7 @@ export function CategoriesView({
                   {categories.map((category) => (
                     <CategoryEditor
                       category={category}
+                      categories={categories}
                       key={category.id}
                       onUpdate={(patch) => onUpdateCategory(category.id, patch)}
                     />
@@ -214,17 +246,41 @@ export function CategoriesView({
   )
 }
 
+const transactionRoleOptions: Array<{ label: string; value: TransactionRole }> = [
+  { label: 'external expense', value: 'external_expense' },
+  { label: 'external income', value: 'external_income' },
+  { label: 'internal transfer', value: 'internal_transfer' },
+  { label: 'credit card payment', value: 'credit_card_payment' },
+  { label: 'balance adjustment', value: 'balance_adjustment' },
+  { label: 'investment movement', value: 'investment_movement' },
+  { label: 'ignore', value: 'ignore' },
+]
+
 function CategoryEditor({
+  categories,
   category,
   onUpdate,
 }: {
+  categories: Category[]
   category: Category
   onUpdate: (patch: Partial<Category>) => void
 }) {
-  const [draft, setDraft] = useState({
+  const invalidParentIds = categoryAndDescendantIds(category, categories)
+  const inheritedRole = resolveCategoryRole({ ...category, role: undefined }, categories)
+  const [draft, setDraft] = useState<{
+    name: string
+    color: string
+    type: NonNullable<Category['type']>
+    parentId: string
+    role: TransactionRole | ''
+    budgetable: boolean
+    isArchived: boolean
+  }>({
     name: category.name,
     color: category.color,
     type: category.type ?? 'expense',
+    parentId: category.parentId ?? '',
+    role: category.role ?? '',
     budgetable: Boolean(category.budgetable),
     isArchived: Boolean(category.isArchived),
   })
@@ -235,6 +291,8 @@ function CategoryEditor({
         name: category.name,
         color: category.color,
         type: category.type ?? 'expense',
+        parentId: category.parentId ?? '',
+        role: category.role ?? '',
         budgetable: Boolean(category.budgetable),
         isArchived: Boolean(category.isArchived),
       })
@@ -248,6 +306,8 @@ function CategoryEditor({
       name: draft.name.trim(),
       color: draft.color,
       type: draft.type,
+      parentId: draft.parentId || undefined,
+      role: draft.role || undefined,
       budgetable: draft.budgetable,
       isArchived: draft.isArchived,
     })
@@ -265,6 +325,21 @@ function CategoryEditor({
       </TableCell>
       <TableCell>
         <Select
+          aria-label={`${draft.name} parent category`}
+          onChange={(event) => setDraft({ ...draft, parentId: event.target.value })}
+          selectSize="sm"
+          value={draft.parentId}
+        >
+          <option value="">No parent</option>
+          {categories
+            .filter((item) => !item.isArchived && !invalidParentIds.has(item.id))
+            .map((item) => (
+              <option key={item.id} value={item.id}>{item.name}</option>
+            ))}
+        </Select>
+      </TableCell>
+      <TableCell>
+        <Select
           aria-label="Category type"
           onChange={(event) => setDraft({ ...draft, type: event.target.value as NonNullable<Category['type']> })}
           selectSize="sm"
@@ -274,6 +349,24 @@ function CategoryEditor({
           <option value="income">income</option>
           <option value="transfer">transfer</option>
         </Select>
+      </TableCell>
+      <TableCell>
+        <Stack gap="xs">
+          <Select
+            aria-label={`${draft.name} category role`}
+            onChange={(event) => setDraft({ ...draft, role: event.target.value as TransactionRole | '' })}
+            selectSize="sm"
+            value={draft.role}
+          >
+            <option value="">inherit role</option>
+            {transactionRoleOptions.map((role) => (
+              <option key={role.value} value={role.value}>{role.label}</option>
+            ))}
+          </Select>
+          {!draft.role && inheritedRole ? (
+            <Text size="xs" tone="muted">inherited: {roleLabel(inheritedRole)}</Text>
+          ) : null}
+        </Stack>
       </TableCell>
       <TableCell>
         <Input
@@ -307,6 +400,10 @@ function CategoryEditor({
       </TableCell>
     </TableRow>
   )
+}
+
+function roleLabel(role: TransactionRole) {
+  return transactionRoleOptions.find((option) => option.value === role)?.label ?? role
 }
 
 function TagEditor({ tag, onUpdate }: { tag: Tag; onUpdate: (patch: Partial<Tag>) => void }) {

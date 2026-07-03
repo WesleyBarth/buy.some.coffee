@@ -1,5 +1,23 @@
 export type AccountType = 'checking' | 'savings' | 'credit' | 'investment' | 'loan' | 'cash'
 
+export type TransactionRole =
+  | 'external_expense'
+  | 'external_income'
+  | 'internal_transfer'
+  | 'credit_card_payment'
+  | 'balance_adjustment'
+  | 'investment_movement'
+  | 'ignore'
+
+export type PlaidModeledOutcome =
+  | 'import'
+  | 'duplicate'
+  | 'credit_card_payment'
+  | 'internal_transfer'
+  | 'needs_review'
+
+export type ReconciliationStatus = 'current' | 'needs_review' | 'unmapped'
+
 export type Account = {
   id: string
   name: string
@@ -14,6 +32,8 @@ export type Category = {
   name: string
   color: string
   type?: 'income' | 'expense' | 'transfer'
+  parentId?: string
+  role?: TransactionRole
   budgetable?: boolean
   isArchived?: boolean
 }
@@ -34,10 +54,28 @@ export type Transaction = {
   amount: number
   source: 'manual' | 'csv' | 'bank_api'
   externalId?: string
+  pendingExternalId?: string
+  originalDescription?: string
+  role?: TransactionRole
+  transferGroupId?: string
+  modeledOutcome?: PlaidModeledOutcome
   tagIds?: string[]
 }
 
-export type TransactionPatch = Partial<Pick<Transaction, 'date' | 'accountId' | 'description' | 'category' | 'amount' | 'tagIds'>>
+export type TransactionPatch = Partial<Pick<
+  Transaction,
+  | 'date'
+  | 'accountId'
+  | 'description'
+  | 'category'
+  | 'amount'
+  | 'tagIds'
+  | 'role'
+  | 'transferGroupId'
+  | 'pendingExternalId'
+  | 'originalDescription'
+  | 'modeledOutcome'
+>>
 export type TransactionDraft = {
   date: string
   accountId: string
@@ -118,6 +156,10 @@ export type PlaidAccountPreview = {
   isoCurrencyCode?: string | null
   linkedAccountId?: string
   lastBalanceSyncAt?: string
+  acceptedBalance?: number | null
+  acceptedBalanceAt?: string
+  acceptedTransactionsCursor?: string
+  reconciliationStatus?: ReconciliationStatus
 }
 
 export type PlaidTransactionPreview = {

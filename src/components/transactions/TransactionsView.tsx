@@ -18,13 +18,13 @@ type TransactionsViewProps = {
   activeTags: Tag[]
   categoryLabels: string[]
   columnVisibility: TransactionColumnVisibility
-  currentMonthLabel: string
+  selectedMonthLabel: string
   displayedTransactions: Transaction[]
-  isCurrentMonthOnly: boolean
+  isSelectedMonthOnly: boolean
   newTransaction: TransactionDraft
   onAddTransaction: () => void
   onColumnVisibilityChange: (next: TransactionColumnVisibility) => void
-  onCurrentMonthOnlyChange: (next: boolean) => void
+  onSelectedMonthOnlyChange: (next: boolean) => void
   onDeleteTransaction: (transactionId: string) => void
   onNewTransactionChange: (transaction: TransactionDraft) => void
   onOpenAccounts: () => void
@@ -41,13 +41,13 @@ export function TransactionsView({
   activeTags,
   categoryLabels,
   columnVisibility,
-  currentMonthLabel,
+  selectedMonthLabel,
   displayedTransactions,
-  isCurrentMonthOnly,
+  isSelectedMonthOnly,
   newTransaction,
   onAddTransaction,
   onColumnVisibilityChange,
-  onCurrentMonthOnlyChange,
+  onSelectedMonthOnlyChange,
   onDeleteTransaction,
   onNewTransactionChange,
   onOpenAccounts,
@@ -72,11 +72,11 @@ export function TransactionsView({
         accounts={accounts}
         categories={activeCategories}
         columnVisibility={columnVisibility}
-        currentMonthLabel={currentMonthLabel}
-        isCurrentMonthOnly={isCurrentMonthOnly}
+        selectedMonthLabel={selectedMonthLabel}
+        isSelectedMonthOnly={isSelectedMonthOnly}
         onColumnVisibilityChange={onColumnVisibilityChange}
         onDeleteTransaction={onDeleteTransaction}
-        onCurrentMonthOnlyChange={onCurrentMonthOnlyChange}
+        onSelectedMonthOnlyChange={onSelectedMonthOnlyChange}
         onUpdateTransaction={onUpdateTransaction}
         tags={activeTags}
         totalTransactionCount={totalTransactionCount}

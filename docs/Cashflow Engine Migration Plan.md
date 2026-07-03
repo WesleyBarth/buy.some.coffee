@@ -21,6 +21,10 @@ the central cashflow workflow described in `OPINIONS.md` and
 - Plaid balances can be refreshed and copied into mapped app accounts, but there
   is no accepted balance checkpoint, per-account reconciliation result, modeled
   transaction outcome, transfer pair, or cursor gate tied to reconciliation.
+- The app currently has a single implicit month based on the calendar current
+  month. Historical analysis needs an explicit selected month state so dashboard,
+  budgets, recurring projections, charts, and Plaid/reconciliation views can all
+  refer to the same period.
 - Existing Supabase migrations are append-only; future schema changes must be new
   migrations and must preserve local demo mode.
 
@@ -35,6 +39,43 @@ the central cashflow workflow described in `OPINIONS.md` and
   Plaid sync gates.
 - Keep net worth behavior stable during this pass; only shared account balance
   normalization should be reused.
+- Optimize for a private, straightforward financial life. Document edge cases, but
+  build the simple correct path first.
+- Do not use ignored Plaid rows as a normal import outcome. A posted mapped Plaid
+  row should be modeled into the account activity, matched as an existing
+  duplicate, paired as settlement/transfer, or held for review.
+
+## Phase 0: Month Selection State
+
+Goal: make the app's monthly operating picture navigable before deeper engine
+changes make month-specific analysis more important.
+
+1. Add a global selected month state owned near the existing app state in
+   `src/App.tsx`.
+2. Default the selected month to the current calendar month.
+3. Provide a compact month selector with:
+   - current month shortcut
+   - previous/next month controls
+   - direct month selection for historical review
+4. Replace direct uses of current calendar month for analysis views with selected
+   month where the screen is explicitly month-based:
+   - dashboard
+   - budgets
+   - recurring projections
+   - transaction month filters
+   - spend/category charts
+5. Keep non-month-bound surfaces independent:
+   - account balances
+   - Plaid account mapping
+   - net worth snapshots unless filtered later
+
+Acceptance:
+
+- The default behavior remains current-month analysis.
+- Previous months can be selected without changing account balances or current
+  Plaid status.
+- Monthly calculations consume one shared selected month instead of each view
+  independently assuming today.
 
 ## Phase 1: Domain Model Foundations
 
@@ -83,7 +124,6 @@ Create a new timestamped migration that adds:
 - `transactions.pending_external_id text`
 - `transactions.original_description text`
 - `transactions.modeled_outcome text check (...)`
-- `transactions.ignored_reason text`
 - `plaid_accounts.accepted_balance numeric(14, 2)`
 - `plaid_accounts.accepted_balance_at timestamptz`
 - `plaid_accounts.accepted_transactions_cursor text`
@@ -161,7 +201,6 @@ cursor can be committed.
    - `duplicate`
    - `credit_card_payment`
    - `internal_transfer`
-   - `ignore`
    - `needs_review`
 3. Keep pending rows visible only as context if needed, but exclude them from
    import, calculations, and reconciliation gates.
@@ -176,6 +215,8 @@ Acceptance:
 - Cursor commit is disabled while any posted mapped row is `needs_review`.
 - Exact Plaid id duplicates are not imported.
 - Pending-to-posted replacements do not create duplicate spending.
+- There is no default "ignore this posted mapped row" path in the Plaid sync
+  workflow.
 
 ## Phase 5: Import, Pairing, And Role Persistence
 
@@ -187,16 +228,16 @@ Goal: write modeled activity into transaction rows in a way calculations can tru
 3. If only one side of a credit card payment exists, persist
    `credit_card_payment` and let reconciliation determine whether review is still
    needed.
-4. Store ignored posted rows with an explicit ignored outcome or in a sync-session
-   detail table so they are not silently skipped.
-5. Only commit the item cursor after all posted rows have modeled outcomes.
+4. Keep `needs_review` rows out of cursor commit until they are modeled or matched.
+5. Only commit the item cursor after all posted mapped rows have modeled outcomes.
 
 Acceptance:
 
 - Imported card purchases remain `external_expense`.
 - Imported card payments are `credit_card_payment`.
 - Imported checking-to-savings transfers are `internal_transfer`.
-- Ignored rows are auditable.
+- A Plaid sync produces a balanced, explainable set of modeled account activity
+  unless a rare unresolved delta is explicitly accepted during reconciliation.
 
 ## Phase 6: Account Reconciliation
 
@@ -212,17 +253,23 @@ account before completing sync.
    - current normalized Plaid balance
    - unexplained delta
    - status: `current`, `needs_review`, or `unmapped`
-3. Refresh Plaid balances after import and before reconciliation.
-4. Gate cursor/checkpoint commit until:
+3. Use `$10` as the initial review threshold for this private workflow. Smaller
+   cent-level differences can be documented as edge cases and revisited after the
+   engine is running against real syncs.
+4. Refresh Plaid balances after import and before reconciliation.
+5. Gate cursor/checkpoint commit until:
    - every posted update has a modeled outcome
    - every mapped account is current or user-accepted with unresolved delta
-5. Defer explicit balance adjustment rows until the open decision is resolved.
+6. Defer explicit balance adjustment rows until real testing proves they are
+   needed.
 
 Acceptance:
 
 - Reconciliation is per account, not global.
 - Unmapped Plaid accounts are surfaced as `unmapped`.
 - Mapped accounts with unexplained deltas cannot be marked current silently.
+- Unresolved deltas should be rare; the main flow assumes straightforward account
+  syncs that net out cleanly.
 
 ## Phase 7: UI Workflow Alignment
 
@@ -240,6 +287,7 @@ Goal: expose the engine without turning users into bookkeepers.
 3. Dashboard:
    - rename cash metrics around monthly cash balance terms
    - show cash on hand and unpaid credit liability separately
+   - make the selected month visible and consistent across monthly panels
 4. Budgets:
    - roll up child categories under budgetable ancestors
    - allow drill-down without double-counting direct parent activity.
@@ -252,25 +300,25 @@ Acceptance:
 
 ## Suggested Implementation Order
 
-1. Add types and pure role/category/account helpers.
-2. Add focused unit-like fixtures or lightweight helper tests if a test harness is
+1. Add selected month state and thread it through month-based views.
+2. Add types and pure role/category/account helpers.
+3. Add focused unit-like fixtures or lightweight helper tests if a test harness is
    introduced; otherwise validate through `npm run build` and `npm run lint`.
-3. Add the additive Supabase migration.
-4. Thread new fields through remote load/save and local demo state.
-5. Move dashboard/budget calculations to role-aware helpers.
-6. Change Plaid preview to modeled outcomes.
-7. Persist outcomes, roles, descriptions, and pair ids on import.
-8. Add reconciliation helpers and checkpoint fields.
-9. Replace cursor commit buttons with gated sync acceptance.
-10. Add category tree UI and budget rollups.
+4. Add the additive Supabase migration.
+5. Thread new fields through remote load/save and local demo state.
+6. Move dashboard/budget calculations to role-aware helpers.
+7. Change Plaid preview to modeled outcomes.
+8. Persist outcomes, roles, descriptions, and pair ids on import.
+9. Add reconciliation helpers and checkpoint fields.
+10. Replace cursor commit buttons with gated sync acceptance.
+11. Add category tree UI and budget rollups.
 
 ## Open Questions To Resolve Before Building Gates
 
-- Should ignored posted Plaid rows live in `transactions` with role `ignore`, or in
-  a separate sync-session detail table?
-- Should accepted unresolved deltas create explicit `balance_adjustment`
+- Should accepted rare unresolved deltas create explicit `balance_adjustment`
   transactions now, or only checkpoint metadata?
-- What tolerance should reconciliation use for each account type and currency?
+- Is the initial `$10` reconciliation threshold good enough after testing on real
+  Plaid syncs?
 - Should category tree identity remain name-based in local state short term, or
   should the app move transaction/budget/category references to ids in the same
   migration?

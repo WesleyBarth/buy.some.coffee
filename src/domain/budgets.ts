@@ -1,3 +1,5 @@
+import { categoryAndDescendantNames } from './categories'
+import { isBudgetSpend } from './transactions'
 import type { Budget, Category, Transaction } from './types'
 
 export type BudgetRow = {
@@ -23,23 +25,24 @@ export type BudgetSummary = {
 export function buildBudgetRows({
   budgetableCategories,
   budgets,
+  categories,
   currentMonth,
   variableTransactions,
   normalizeCategoryId,
 }: {
   budgetableCategories: Category[]
   budgets: Budget[]
+  categories: Category[]
   currentMonth: string
   variableTransactions: Transaction[]
   normalizeCategoryId: (category: string) => string
 }) {
   return budgetableCategories.map((category) => {
     const budget = budgets.find((item) => item.month === currentMonth && item.category === category.name)
-    const spent = Math.abs(
-      variableTransactions
-        .filter((transaction) => transaction.category === category.name && transaction.amount < 0)
-        .reduce((sum, transaction) => sum + transaction.amount, 0),
-    )
+    const categoryNames = categoryAndDescendantNames(category, categories)
+    const spent = variableTransactions
+      .filter((transaction) => categoryNames.has(transaction.category) && isBudgetSpend(transaction, categories))
+      .reduce((sum, transaction) => sum - transaction.amount, 0)
     const planned = budget?.planned ?? 0
     const usageRatio = planned > 0 ? spent / planned : spent > 0 ? 1 : 0
     return {

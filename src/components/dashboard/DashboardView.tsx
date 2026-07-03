@@ -47,6 +47,7 @@ type DashboardViewProps = {
   spendByCategory: Array<{ category: string; spent: number }>
   totalBudgetRemaining: number
   trackedMonthEndPosition: number
+  unpaidCreditCardLiability: number
 }
 
 const chartAxisTick = {
@@ -80,21 +81,27 @@ export function DashboardView({
   spendByCategory,
   totalBudgetRemaining,
   trackedMonthEndPosition,
+  unpaidCreditCardLiability,
 }: DashboardViewProps) {
   return (
     <Stack gap="md">
       <DashboardGrid columns={12} gap="md">
         <DashboardGridItem span={{ base: 12, sm: 6, lg: 3 }}>
-          <DashboardMetric actions={<Landmark size={20} />} label="Current cash" value={<MoneyAmount amount={currentCashPosition} neutral />} />
+          <DashboardMetric actions={<Landmark size={20} />} label="Cash on hand" value={<MoneyAmount amount={currentCashPosition} neutral />} />
+        </DashboardGridItem>
+        <DashboardGridItem span={{ base: 12, sm: 6, lg: 3 }}>
+          <DashboardMetric actions={<CreditCard size={20} />} label="Unpaid card liability" value={<MoneyAmount amount={-unpaidCreditCardLiability} />} />
         </DashboardGridItem>
         <DashboardGridItem span={{ base: 12, sm: 6, lg: 3 }}>
           <DashboardMetric actions={<WalletCards size={20} />} label="Projected month end" value={<MoneyAmount amount={trackedMonthEndPosition} neutral />} />
         </DashboardGridItem>
         <DashboardGridItem span={{ base: 12, sm: 6, lg: 3 }}>
-          <DashboardMetric actions={<Banknote size={20} />} label={totalBudgetRemaining >= 0 ? 'Budget remaining' : 'Budget over'} value={<MoneyAmount amount={Math.abs(totalBudgetRemaining)} neutral />} />
-        </DashboardGridItem>
-        <DashboardGridItem span={{ base: 12, sm: 6, lg: 3 }}>
-          <DashboardMetric actions={<CreditCard size={20} />} label="$1k savings variance" value={<MoneyAmount amount={savingsGoalVariance} />} />
+          <DashboardMetric
+            actions={<Banknote size={20} />}
+            description={<>Target variance <MoneyAmount amount={savingsGoalVariance} /></>}
+            label={totalBudgetRemaining >= 0 ? 'Budget remaining' : 'Budget over'}
+            value={<MoneyAmount amount={Math.abs(totalBudgetRemaining)} neutral />}
+          />
         </DashboardGridItem>
       </DashboardGrid>
 
@@ -126,7 +133,7 @@ export function DashboardView({
                     labelStyle={chartTooltipLabelStyle}
                     formatter={(value, name) => [
                       currency.format(Number(value)),
-                      name === 'expected' ? 'Current cash' : 'Projected cash',
+                      name === 'expected' ? 'Cash on hand' : 'Projected monthly cash',
                     ]}
                     labelFormatter={(label) => `${label}`}
                   />
@@ -154,7 +161,7 @@ export function DashboardView({
         <DashboardGridItem span={{ base: 12, lg: 4 }}>
           <TableFrame
             density="compact"
-            heading="Cashflow accounts"
+            heading="Cashflow scope"
             toolbar={<Text size="sm" tone="muted">{cashflowAccounts.length} active</Text>}
           >
             {cashflowAccounts.length === 0 ? (

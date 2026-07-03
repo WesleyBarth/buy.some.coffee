@@ -1,4 +1,6 @@
-import type { Transaction } from './types'
+import { categoryAndDescendantNames, categoryByName } from './categories'
+import { isBudgetSpend } from './transactions'
+import type { Category, Transaction } from './types'
 
 export function buildMonthPositionTrend({
   currentCashPosition,
@@ -13,16 +15,20 @@ export function buildMonthPositionTrend({
   ]
 }
 
-export function buildSpendByCategory(categoryLabels: string[], currentMonthTransactions: Transaction[]) {
+export function buildSpendByCategory(categoryLabels: string[], currentMonthTransactions: Transaction[], categories: Category[]) {
+  const categoryLookup = categoryByName(categories)
+
   return categoryLabels
-    .map((category) => ({
-      category,
-      spent: Math.abs(
-        currentMonthTransactions
-          .filter((transaction) => transaction.category === category && transaction.amount < 0)
-          .reduce((sum, transaction) => sum + transaction.amount, 0),
-      ),
-    }))
+    .map((category) => {
+      const categoryItem = categoryLookup.get(category)
+      const categoryNames = categoryItem ? categoryAndDescendantNames(categoryItem, categories) : new Set([category])
+      return {
+        category,
+        spent: currentMonthTransactions
+          .filter((transaction) => categoryNames.has(transaction.category) && isBudgetSpend(transaction, categories))
+          .reduce((sum, transaction) => sum - transaction.amount, 0),
+      }
+    })
     .filter((item) => item.spent > 0)
     .sort((a, b) => b.spent - a.spent)
 }

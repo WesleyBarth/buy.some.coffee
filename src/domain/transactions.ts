@@ -1,4 +1,9 @@
-import type { Transaction, TransactionSortKey } from './types'
+import {
+  categoryByName,
+  resolveCategoryBudgetable,
+  resolveCategoryRole,
+} from './categories'
+import type { Category, Transaction, TransactionRole, TransactionSortKey } from './types'
 
 export function formatShortDate(value: string) {
   const [, , monthValue, dayValue] = value.match(/^(\d{4})-(\d{2})-(\d{2})$/) ?? []
@@ -31,4 +36,30 @@ export function compareTransactions(
   }
   if (key === 'tags') return (a.tagIds ?? []).join('|').localeCompare((b.tagIds ?? []).join('|'))
   return String(a[key]).localeCompare(String(b[key]))
+}
+
+export function effectiveTransactionRole(transaction: Transaction, categories: Category[]): TransactionRole {
+  if (transaction.role) return transaction.role
+
+  const category = categoryByName(categories).get(transaction.category)
+  const categoryRole = resolveCategoryRole(category, categories)
+  if (categoryRole) return categoryRole
+
+  return transaction.amount > 0 ? 'external_income' : 'external_expense'
+}
+
+export function isExternalExpense(transaction: Transaction, categories: Category[]) {
+  return effectiveTransactionRole(transaction, categories) === 'external_expense'
+}
+
+export function isExternalIncome(transaction: Transaction, categories: Category[]) {
+  return effectiveTransactionRole(transaction, categories) === 'external_income'
+}
+
+export function isBudgetSpend(transaction: Transaction, categories: Category[]) {
+  const category = categoryByName(categories).get(transaction.category)
+  return (
+    isExternalExpense(transaction, categories) &&
+    resolveCategoryBudgetable(category, categories)
+  )
 }
