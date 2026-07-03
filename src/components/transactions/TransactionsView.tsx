@@ -1,3 +1,4 @@
+import { Stack } from '@hyperview/ui'
 import type {
   Account,
   Category,
@@ -56,7 +57,7 @@ export function TransactionsView({
   totalTransactionCount,
 }: TransactionsViewProps) {
   return (
-    <section className="view-stack">
+    <Stack gap="sm">
       {activeAccounts.length === 0 ? (
         <AccountRequiredPanel onOpenAccounts={onOpenAccounts} />
       ) : null}
@@ -81,6 +82,6 @@ export function TransactionsView({
         totalTransactionCount={totalTransactionCount}
         transactions={displayedTransactions}
       />
-    </section>
+    </Stack>
   )
 }

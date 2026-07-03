@@ -1,0 +1,33 @@
+.finance-shell.hv-app-shell--left .hv-app-shell__body {
+  grid-template-columns: 220px minmax(0, 1fr);
+}
+
+.finance-shell .hv-app-shell__main {
+  padding: var(--hv-space-5);
+}
+
+.finance-shell--transactions .hv-app-shell__main {
+  padding: 0;
+}
+
+.finance-shell--dashboard .hv-dashboard-metric {
+  min-height: 6rem;
+  justify-content: flex-start;
+  gap: var(--hv-space-4);
+}
+
+.hv-table__cell :where(.hv-input, .hv-select, .hv-textarea) {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.hv-table__cell :where(.hv-input, .hv-select, .hv-textarea):focus {
+  background: var(--hv-control-background);
+  border-color: var(--hv-color-accent);
+  box-shadow: 0 0 0 3px var(--hv-color-accent-soft);
+}
+
+.hv-table__cell :where(.hv-input--invalid, .hv-select--invalid, .hv-textarea--invalid) {
+  border-color: var(--hv-color-danger);
+}

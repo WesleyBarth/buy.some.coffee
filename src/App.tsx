@@ -1,5 +1,26 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
+import {
+  Alert,
+  AppShell,
+  Button,
+  Field,
+  Header,
+  IconButton,
+  Input,
+  Label,
+  LoadingOverlay,
+  Nav,
+  NavItem,
+  Panel,
+  PanelBody,
+  Sidebar,
+  SegmentedControl,
+  Inline,
+  Stack,
+  Text,
+  useToast,
+} from '@hyperview/ui'
 import Papa from 'papaparse'
 import {
   Banknote,
@@ -18,8 +39,6 @@ import {
   Tags,
   Upload,
 } from 'lucide-react'
-import { clsx } from 'clsx'
-import './App.css'
 import { AccountsView } from './components/accounts/AccountsView'
 import { BudgetsView } from './components/budgets/BudgetsView'
 import { CategoriesView } from './components/categories/CategoriesView'
@@ -30,8 +49,6 @@ import { PlaidView } from './components/plaid/PlaidView'
 import { ExpensesView } from './components/recurring/ExpensesView'
 import { IncomeView } from './components/recurring/IncomeView'
 import { TransactionsView } from './components/transactions/TransactionsView'
-import { BusyOverlay } from './components/ui/BusyOverlay'
-import { Toast } from './components/ui/Toast'
 import {
   accountSignedBalance,
   isCashflowAccount,
@@ -126,6 +143,19 @@ const knownViewIds = new Set([
   'budgets',
   'net-worth',
 ])
+
+const primaryNavItems = [
+  ['dashboard', 'Dashboard', BarChart3],
+  ['accounts', 'Accounts', Landmark],
+  ['plaid', 'Plaid', ShieldCheck],
+  ['categories', 'Categories', Tags],
+  ['transactions', 'Transactions', ReceiptText],
+  ['import', 'Import', Upload],
+  ['expenses', 'Expenses', CreditCard],
+  ['income', 'Income', Banknote],
+  ['budgets', 'Budgets', CalendarDays],
+  ['net-worth', 'Net Worth', LineChart],
+] as const
 
 function App() {
   const remoteEnabled = isSupabaseConfigured && supabase
@@ -236,6 +266,7 @@ function App() {
   const [recurringCandidateDrafts, setRecurringCandidateDrafts] = useState<Record<string, Partial<RecurringCashflow>>>({})
   const [pendingRecurringFocusId, setPendingRecurringFocusId] = useState('')
   const recurringFocusRef = useRef<HTMLInputElement | null>(null)
+  const dismissNotice = useCallback(() => setNotice(''), [])
 
   const isRemoteSignedIn = Boolean(remoteEnabled && session)
   const isInitialRemoteDataLoading = isRemoteSignedIn && !remoteDataLoaded
@@ -1949,90 +1980,94 @@ function App() {
     return <AuthScreen setAppError={setAppError} setNotice={setNotice} appError={appError} notice={notice} />
   }
 
-  return (
-    <div className={clsx('app-shell', sidebarCollapsed && 'sidebar-collapsed')}>
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">
-            <CircleDollarSign size={24} />
-          </div>
-          <div>
-            <strong>Buy Some Coffee</strong>
-            <span>Personal finance</span>
-          </div>
-        </div>
+  const sidebar = sidebarCollapsed ? null : (
+    <Sidebar
+      footer={
+        <Stack gap="sm">
+          <Inline align="center" gap="sm">
+            <ShieldCheck size={18} />
+            <Stack gap="none">
+              <Text size="sm" weight="semibold">
+                {isRemoteSignedIn ? 'Supabase connected' : 'Local browser storage'}
+              </Text>
+              <Text size="xs" tone="muted">
+                {session?.user.email ?? 'Data persists on this device'}
+              </Text>
+            </Stack>
+          </Inline>
 
-        <nav className="nav-list" aria-label="Primary">
-          {[
-            ['dashboard', 'Dashboard', BarChart3],
-            ['accounts', 'Accounts', Landmark],
-            ['plaid', 'Plaid', ShieldCheck],
-            ['categories', 'Categories', Tags],
-            ['transactions', 'Transactions', ReceiptText],
-            ['import', 'Import', Upload],
-            ['expenses', 'Expenses', CreditCard],
-            ['income', 'Income', Banknote],
-            ['budgets', 'Budgets', CalendarDays],
-            ['net-worth', 'Net Worth', LineChart],
-          ].map(([id, label, Icon]) => (
-            <button
-              className={clsx('nav-button', activeView === id && 'active')}
-              key={id as string}
-              onClick={() => setActiveView(id as string)}
-              type="button"
-            >
-              <Icon size={18} />
-              {label as string}
-            </button>
-          ))}
-        </nav>
-
-        <div className={clsx('supabase-status', isRemoteSignedIn && 'ready')}>
-          <ShieldCheck size={18} />
-          <div>
-            <strong>{isRemoteSignedIn ? 'Supabase connected' : 'Local browser storage'}</strong>
-            <span>{session?.user.email ?? 'Data persists on this device'}</span>
-          </div>
-        </div>
-
-        {isRemoteSignedIn && (
-          <button className="nav-button sign-out-button" onClick={() => supabase?.auth.signOut()} type="button">
-            <LogOut size={18} />
-            Sign out
-          </button>
-        )}
-      </aside>
-
-      <main className="workspace busy-surface" aria-busy={showLoadingData}>
-        <header className="topbar">
-          <div className="topbar-title-group">
-            <button
-              aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
-              className="icon-action topbar-collapse"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
-              type="button"
-            >
-              {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
-            </button>
-            <div>
-              <span className="eyebrow">{formatMonthLabel(currentMonth)}</span>
-              <h1>{viewTitle(activeView)}</h1>
-            </div>
-          </div>
-          <button
-            className="primary-action"
-            disabled={activeAccounts.length === 0}
-            onClick={() => setActiveView('transactions')}
-            type="button"
+          {isRemoteSignedIn && (
+            <Button fullWidth onClick={() => supabase?.auth.signOut()} size="sm" variant="ghost">
+              <LogOut size={17} />
+              Sign out
+            </Button>
+          )}
+        </Stack>
+      }
+      header={<AppBrand subtitle="Personal finance" />}
+      width="220px"
+    >
+      <Nav label="Primary">
+        {primaryNavItems.map(([id, label, Icon]) => (
+          <NavItem
+            active={activeView === id}
+            href={`#${id}`}
+            key={id}
+            onClick={(event) => {
+              event.preventDefault()
+              setActiveView(id)
+            }}
           >
-            <Plus size={18} />
-            Add transaction
-          </button>
-        </header>
+            <Icon size={18} />
+            {label}
+          </NavItem>
+        ))}
+      </Nav>
+    </Sidebar>
+  )
 
-        {appError && <div className="alert error">{appError}</div>}
-        <BusyOverlay active={showLoadingData} message="Loading Supabase data..." />
+  return (
+    <AppShell
+      className={`finance-shell finance-shell--${activeView}`}
+      header={
+        <Header
+          actions={
+            <Button disabled={activeAccounts.length === 0} onClick={() => setActiveView('transactions')} size="sm">
+              <Plus size={18} />
+              Add transaction
+            </Button>
+          }
+          brand={
+            <Inline align="center" gap="sm">
+              <IconButton
+                label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                size="sm"
+                variant="ghost"
+              >
+                {sidebarCollapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}
+              </IconButton>
+              <Stack gap="none">
+                <Text as="span" size="xs" tone="muted" weight="bold">
+                  {formatMonthLabel(currentMonth)}
+                </Text>
+                <Text as="h1" size="xl" weight="bold">
+                  {viewTitle(activeView)}
+                </Text>
+              </Stack>
+            </Inline>
+          }
+        />
+      }
+      leftSidebar={sidebar}
+    >
+      <LoadingOverlay active={showLoadingData} label="Loading Supabase data">
+        <Stack gap="sm">
+        {appError && (
+          <Alert tone="danger">
+            {appError}
+          </Alert>
+        )}
 
         {!isInitialRemoteDataLoading && (
         <>
@@ -2224,9 +2259,10 @@ function App() {
             )}
         </>
         )}
-      </main>
-      <Toast message={notice} onDismiss={() => setNotice('')} />
-    </div>
+        </Stack>
+      </LoadingOverlay>
+      <NoticeToast message={notice} onDismiss={dismissNotice} />
+    </AppShell>
   )
 }
 
@@ -2245,6 +2281,7 @@ function AuthScreen({
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [working, setWorking] = useState(false)
+  const dismissNotice = useCallback(() => setNotice(''), [setNotice])
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -2268,57 +2305,89 @@ function AuthScreen({
   }
 
   return (
-    <main className="auth-screen">
-      <form className="panel auth-panel" onSubmit={submit}>
-        <div className="brand auth-brand">
-          <div className="brand-mark">
-            <CircleDollarSign size={24} />
-          </div>
-          <div>
-            <strong>Buy Some Coffee</strong>
-            <span>Supabase-backed finance tracking</span>
-          </div>
-        </div>
-        <div className="segmented-control">
-          <button className={mode === 'sign-in' ? 'active' : ''} onClick={() => setMode('sign-in')} type="button">
-            Sign in
-          </button>
-          <button className={mode === 'sign-up' ? 'active' : ''} onClick={() => setMode('sign-up')} type="button">
-            Sign up
-          </button>
-        </div>
-        {appError && <div className="alert error">{appError}</div>}
-        <label>
-          Email
-          <input autoComplete="email" onChange={(event) => setEmail(event.target.value)} type="email" value={email} />
-        </label>
-        <label>
-          Password
-          <input
-            autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
-            minLength={6}
-            onChange={(event) => setPassword(event.target.value)}
-            type="password"
-            value={password}
-          />
-        </label>
-        <button className="primary-action" disabled={working} type="submit">
-          {working ? 'Working...' : mode === 'sign-in' ? 'Sign in' : 'Create account'}
-        </button>
-      </form>
-      <Toast message={notice} onDismiss={() => setNotice('')} />
-    </main>
+    <AppShell>
+      <Panel>
+        <PanelBody>
+          <form onSubmit={submit}>
+            <Stack gap="md">
+              <AppBrand subtitle="Supabase-backed finance tracking" />
+              <SegmentedControl
+                label="Authentication mode"
+                onValueChange={(value) => setMode(value as 'sign-in' | 'sign-up')}
+                options={[
+                  { label: 'Sign in', value: 'sign-in' },
+                  { label: 'Sign up', value: 'sign-up' },
+                ]}
+                value={mode}
+              />
+              {appError && <Alert tone="danger">{appError}</Alert>}
+              <Field>
+                <Label>Email</Label>
+                <Input autoComplete="email" onChange={(event) => setEmail(event.target.value)} type="email" value={email} />
+              </Field>
+              <Field>
+                <Label>Password</Label>
+                <Input
+                  autoComplete={mode === 'sign-in' ? 'current-password' : 'new-password'}
+                  minLength={6}
+                  onChange={(event) => setPassword(event.target.value)}
+                  type="password"
+                  value={password}
+                />
+              </Field>
+              <Button disabled={working} type="submit">
+                {working ? 'Working...' : mode === 'sign-in' ? 'Sign in' : 'Create account'}
+              </Button>
+            </Stack>
+          </form>
+        </PanelBody>
+      </Panel>
+      <NoticeToast message={notice} onDismiss={dismissNotice} />
+    </AppShell>
   )
+}
+
+function AppBrand({ subtitle }: { className?: string; subtitle: string }) {
+  return (
+    <Inline align="center" gap="sm">
+      <CircleDollarSign size={24} />
+      <Stack gap="none">
+        <Text size="sm" weight="semibold">
+          Buy Some Coffee
+        </Text>
+        <Text size="xs" tone="muted">
+          {subtitle}
+        </Text>
+      </Stack>
+    </Inline>
+  )
+}
+
+function NoticeToast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  const toast = useToast()
+
+  useEffect(() => {
+    if (!message) return
+
+    toast.success({ title: message })
+    onDismiss()
+  }, [message, onDismiss, toast])
+
+  return null
 }
 
 function FullPageState({ title, body }: { title: string; body: string }) {
   return (
-    <main className="auth-screen">
-      <section className="panel auth-panel">
-        <h1>{title}</h1>
-        <p>{body}</p>
-      </section>
-    </main>
+    <AppShell>
+      <Panel>
+        <PanelBody>
+          <Stack gap="sm">
+            <Text as="h1" size="xl" weight="bold">{title}</Text>
+            <Text tone="muted">{body}</Text>
+          </Stack>
+        </PanelBody>
+      </Panel>
+    </AppShell>
   )
 }
 

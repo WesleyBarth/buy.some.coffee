@@ -1,7 +1,30 @@
 import { useEffect, useState } from 'react'
-import type { CSSProperties } from 'react'
-import { CalendarDays, Eye, Plus, RotateCcw, SlidersHorizontal, Trash2 } from 'lucide-react'
-import { clsx } from 'clsx'
+import {
+  Badge,
+  Button,
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+  IconButton,
+  Input,
+  Select,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableFrame,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+  TableSortableHeaderCell,
+  TableToolbar,
+  Text,
+} from '@hyperview/ui'
+import { Plus, RotateCcw, SlidersHorizontal, Trash2 } from 'lucide-react'
 import { formatSignedMoneyInput, parseCurrency } from '../../domain/money'
 import { compareTransactions, formatShortDate, parseShortDate } from '../../domain/transactions'
 import type {
@@ -14,8 +37,6 @@ import type {
   TransactionPatch,
   TransactionSortKey,
 } from '../../domain/types'
-import { DataTable } from '../ui/Table'
-import { Surface } from '../ui/Surface'
 
 type TransactionSortState = { key: TransactionSortKey; direction: 'asc' | 'desc' } | null
 
@@ -63,7 +84,6 @@ export function TransactionTable({
   transactions,
 }: TransactionTableProps) {
   const accountById = new Map(accounts.map((account) => [account.id, account.name]))
-  const categoryByName = new Map(categories.map((category) => [category.name, category]))
   const tagById = new Map(tags.map((tag) => [tag.id, tag]))
   const [sort, setSort] = useState<TransactionSortState>({
     key: 'date',
@@ -81,176 +101,111 @@ export function TransactionTable({
     })
   }
 
-  function sortLabel(key: TransactionSortKey) {
-    if (!sort || sort.key !== key) return ''
-    return sort.direction === 'asc' ? ' ↑' : ' ↓'
-  }
-
-  function sortHeaderClass(key: TransactionSortKey) {
-    return clsx('sort-header', sort?.key === key && 'active')
+  function sortDirection(key: TransactionSortKey) {
+    return sort?.key === key ? sort.direction : null
   }
 
   const sortDescription = sort ? `${sort.key} ${sort.direction === 'asc' ? 'ascending' : 'descending'}` : 'manual order'
 
   return (
-    <Surface
-      className="transaction-ledger-surface table-panel-fill"
-      title="Transaction ledger"
-      actions={
-        <div className="table-tools">
-          <span className="table-entry-count">
+    <TableFrame
+      density="compact"
+      heading="Transaction ledger"
+      toolbar={
+        <TableToolbar>
+          <Text size="sm" tone="muted">
             {transactions.length}
             {isCurrentMonthOnly ? ` of ${totalTransactionCount}` : ''} entries
-          </span>
-          <details className="table-menu">
-            <summary className="icon-action table-menu-trigger" title="Filters and columns">
-              <SlidersHorizontal size={16} />
-            </summary>
-            <div className="table-menu-popover">
-              <div className="table-menu-section">
-                <span className="table-menu-label">Filter</span>
-                <label className="menu-check" title={`Show only ${currentMonthLabel}`}>
-                  <input
-                    checked={isCurrentMonthOnly}
-                    onChange={(event) => onCurrentMonthOnlyChange(event.target.checked)}
-                    type="checkbox"
-                  />
-                  <CalendarDays size={15} />
-                  Current month
-                </label>
-              </div>
-              <div className="table-menu-section">
-                <span className="table-menu-label">Columns</span>
-                {(['year', 'account', 'tags', 'source'] as const).map((column) => (
-                  <label className="menu-check" key={column}>
-                    <input
-                      checked={columnVisibility[column]}
-                      onChange={(event) =>
-                        onColumnVisibilityChange({ ...columnVisibility, [column]: event.target.checked })
-                      }
-                      type="checkbox"
-                    />
-                    <Eye size={15} />
-                    {column}
-                  </label>
-                ))}
-              </div>
-            </div>
-          </details>
-          <details className="table-menu">
-            <summary className={clsx('icon-action table-menu-trigger', sort && 'active')} title="Sort options">
-              <RotateCcw size={16} />
-            </summary>
-            <div className="table-menu-popover table-menu-popover-right">
-              <div className="table-menu-section">
-                <span className="table-menu-label">Sort</span>
-                <span className="table-menu-note">Currently {sortDescription}</span>
-                <button className="menu-action" disabled={!sort} onClick={() => setSort(null)} type="button">
-                  <RotateCcw size={15} />
-                  Clear sort
-                </button>
-              </div>
-            </div>
-          </details>
-        </div>
+          </Text>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton label="Filters and columns" size="sm" variant="ghost">
+                <SlidersHorizontal size={16} />
+              </IconButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Filter</DropdownMenuLabel>
+              <DropdownMenuCheckboxItem
+                checked={isCurrentMonthOnly}
+                onCheckedChange={(checked) => onCurrentMonthOnlyChange(checked === true)}
+                onSelect={(event) => event.preventDefault()}
+              >
+                Current month ({currentMonthLabel})
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Columns</DropdownMenuLabel>
+              {(['year', 'account', 'tags', 'source'] as const).map((column) => (
+                <DropdownMenuCheckboxItem
+                  checked={columnVisibility[column]}
+                  key={column}
+                  onCheckedChange={(checked) =>
+                    onColumnVisibilityChange({ ...columnVisibility, [column]: checked === true })
+                  }
+                  onSelect={(event) => event.preventDefault()}
+                >
+                  {column}
+                </DropdownMenuCheckboxItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <IconButton active={Boolean(sort)} label="Sort options" size="sm" variant="ghost">
+                <RotateCcw size={16} />
+              </IconButton>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuLabel>Sort</DropdownMenuLabel>
+              <DropdownMenuItem disabled>{sortDescription}</DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem disabled={!sort} onSelect={() => setSort(null)}>
+                Clear sort
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </TableToolbar>
       }
+      variant="fill"
     >
-      <div className="table-scroll">
-        <DataTable
-          className="transactions-table"
-          colGroup={
-            <colgroup>
-              {columnVisibility.year && <col className="transaction-year-col" />}
-              <col className="transaction-date-col" />
-              <col className="transaction-description-col" />
-              <col className="transaction-amount-col" />
-              <col className="transaction-category-col" />
-              {columnVisibility.account && <col className="transaction-account-col" />}
-              {columnVisibility.tags && <col className="transaction-tags-col" />}
-              {columnVisibility.source && <col className="transaction-source-col" />}
-              <col className="transaction-action-col" />
-            </colgroup>
-          }
-          columns={[
-            ...(columnVisibility.year
-              ? [
-                  {
-                    label: (
-                      <button className={sortHeaderClass('year')} onClick={() => updateSort('year')} type="button">
-                        Year{sortLabel('year')}
-                      </button>
-                    ),
-                  },
-                ]
-              : []),
-            {
-              label: (
-                <button className={sortHeaderClass('date')} onClick={() => updateSort('date')} type="button">
-                  Date{sortLabel('date')}
-                </button>
-              ),
-            },
-            {
-              className: 'description-cell',
-              label: (
-                <button className={sortHeaderClass('description')} onClick={() => updateSort('description')} type="button">
-                  Desc.{sortLabel('description')}
-                </button>
-              ),
-            },
-            {
-              label: (
-                <button className={sortHeaderClass('amount')} onClick={() => updateSort('amount')} type="button">
-                  Amount{sortLabel('amount')}
-                </button>
-              ),
-            },
-            {
-              className: 'category-cell',
-              label: (
-                <button className={sortHeaderClass('category')} onClick={() => updateSort('category')} type="button">
-                  Category{sortLabel('category')}
-                </button>
-              ),
-            },
-            ...(columnVisibility.account
-              ? [
-                  {
-                    className: 'account-cell',
-                    label: (
-                      <button className={sortHeaderClass('account')} onClick={() => updateSort('account')} type="button">
-                        Account{sortLabel('account')}
-                      </button>
-                    ),
-                  },
-                ]
-              : []),
-            ...(columnVisibility.tags
-              ? [
-                  {
-                    className: 'tags-cell',
-                    label: (
-                      <button className={sortHeaderClass('tags')} onClick={() => updateSort('tags')} type="button">
-                        Tags{sortLabel('tags')}
-                      </button>
-                    ),
-                  },
-                ]
-              : []),
-            ...(columnVisibility.source
-              ? [
-                  {
-                    label: (
-                      <button className={sortHeaderClass('source')} onClick={() => updateSort('source')} type="button">
-                        Source{sortLabel('source')}
-                      </button>
-                    ),
-                  },
-                ]
-              : []),
-            { ariaLabel: 'Actions' },
-          ]}
-        >
+      <Table>
+        <TableHead>
+          <TableRow>
+            {columnVisibility.year && (
+              <TableSortableHeaderCell direction={sortDirection('year')} onSort={() => updateSort('year')}>
+                Year
+              </TableSortableHeaderCell>
+            )}
+            <TableSortableHeaderCell direction={sortDirection('date')} onSort={() => updateSort('date')}>
+              Date
+            </TableSortableHeaderCell>
+            <TableSortableHeaderCell direction={sortDirection('description')} onSort={() => updateSort('description')} truncate>
+              Desc.
+            </TableSortableHeaderCell>
+            <TableSortableHeaderCell align="right" direction={sortDirection('amount')} onSort={() => updateSort('amount')}>
+              Amount
+            </TableSortableHeaderCell>
+            <TableSortableHeaderCell direction={sortDirection('category')} onSort={() => updateSort('category')}>
+              Category
+            </TableSortableHeaderCell>
+            {columnVisibility.account && (
+              <TableSortableHeaderCell direction={sortDirection('account')} onSort={() => updateSort('account')}>
+                Account
+              </TableSortableHeaderCell>
+            )}
+            {columnVisibility.tags && (
+              <TableSortableHeaderCell direction={sortDirection('tags')} onSort={() => updateSort('tags')}>
+                Tags
+              </TableSortableHeaderCell>
+            )}
+            {columnVisibility.source && (
+              <TableSortableHeaderCell direction={sortDirection('source')} onSort={() => updateSort('source')}>
+                Source
+              </TableSortableHeaderCell>
+            )}
+            <TableHeaderCell aria-label="Actions" />
+          </TableRow>
+        </TableHead>
+        <TableBody>
           {activeAccounts.length > 0 && (
             <TransactionAddRow
               activeAccounts={activeAccounts}
@@ -268,7 +223,6 @@ export function TransactionTable({
               accountById={accountById}
               accounts={accounts}
               categories={categories}
-              category={categoryByName.get(transaction.category)}
               columnVisibility={columnVisibility}
               key={transaction.id}
               onDelete={() => onDeleteTransaction(transaction.id)}
@@ -278,9 +232,9 @@ export function TransactionTable({
               transaction={transaction}
             />
           ))}
-        </DataTable>
-      </div>
-    </Surface>
+        </TableBody>
+      </Table>
+    </TableFrame>
   )
 }
 
@@ -306,31 +260,31 @@ function TransactionAddRow({
   const canSave = Boolean(newTransaction.description.trim() && Number(newTransaction.amount) && selectedAccountId)
 
   return (
-    <tr className="transaction-add-row">
-      {columnVisibility.year && <td className="quiet-cell">New</td>}
-      <td>
-        <input
+    <TableRow selected>
+      {columnVisibility.year && <TableCell muted>New</TableCell>}
+      <TableCell>
+        <Input
           aria-label="New transaction date"
-          className="table-input add-date-input"
+          inputSize="sm"
           onChange={(event) => onNewTransactionChange({ ...newTransaction, date: event.target.value })}
           type="date"
           value={newTransaction.date}
         />
-      </td>
-      <td className="description-cell">
-        <div className="add-description-stack">
-          <input
+      </TableCell>
+      <TableCell>
+        <Stack gap="xs">
+          <Input
             aria-label="New transaction description"
-            className="table-input description-input"
+            inputSize="sm"
             onChange={(event) => onNewTransactionChange({ ...newTransaction, description: event.target.value })}
             placeholder="Merchant or memo"
             value={newTransaction.description}
           />
           {!columnVisibility.account && (
-            <select
+            <Select
               aria-label="New transaction account"
-              className="table-input add-inline-select"
               onChange={(event) => onNewTransactionChange({ ...newTransaction, accountId: event.target.value })}
+              selectSize="sm"
               value={selectedAccountId}
             >
               {activeAccounts.map((account) => (
@@ -338,39 +292,39 @@ function TransactionAddRow({
                   {account.name}
                 </option>
               ))}
-            </select>
+            </Select>
           )}
-        </div>
-      </td>
-      <td>
-        <input
+        </Stack>
+      </TableCell>
+      <TableCell>
+        <Input
           aria-label="New transaction amount"
-          className="table-input amount-input"
+          inputSize="sm"
           onChange={(event) => onNewTransactionChange({ ...newTransaction, amount: event.target.value })}
           placeholder="-42.50"
           step="0.01"
           type="number"
           value={newTransaction.amount}
         />
-      </td>
-      <td className="category-cell">
-        <select
+      </TableCell>
+      <TableCell>
+        <Select
           aria-label="New transaction category"
-          className="table-input add-inline-select"
           onChange={(event) => onNewTransactionChange({ ...newTransaction, category: event.target.value })}
+          selectSize="sm"
           value={selectedCategory}
         >
           {categoryLabels.map((category) => (
             <option key={category}>{category}</option>
           ))}
-        </select>
-      </td>
+        </Select>
+      </TableCell>
       {columnVisibility.account && (
-        <td className="account-cell">
-          <select
+        <TableCell>
+          <Select
             aria-label="New transaction account"
-            className="table-input account-select"
             onChange={(event) => onNewTransactionChange({ ...newTransaction, accountId: event.target.value })}
+            selectSize="sm"
             value={selectedAccountId}
           >
             {activeAccounts.map((account) => (
@@ -378,24 +332,22 @@ function TransactionAddRow({
                 {account.name}
               </option>
             ))}
-          </select>
-        </td>
+          </Select>
+        </TableCell>
       )}
-      {columnVisibility.tags && <td className="quiet-cell">Tags later</td>}
-      {columnVisibility.source && <td className="quiet-cell">Manual</td>}
-      <td className="action-cell">
-        <button
-          aria-label="Add transaction"
-          className="icon-action row-action add-row-action"
+      {columnVisibility.tags && <TableCell muted>Tags later</TableCell>}
+      {columnVisibility.source && <TableCell muted>Manual</TableCell>}
+      <TableCell align="right">
+        <IconButton
           disabled={!canSave}
+          label="Add transaction"
           onClick={onAddTransaction}
-          title="Add transaction"
-          type="button"
+          size="sm"
         >
           <Plus size={16} />
-        </button>
-      </td>
-    </tr>
+        </IconButton>
+      </TableCell>
+    </TableRow>
   )
 }
 
@@ -403,7 +355,6 @@ function TransactionRow({
   accountById,
   accounts,
   categories,
-  category,
   columnVisibility,
   onDelete,
   onUpdate,
@@ -414,7 +365,6 @@ function TransactionRow({
   accountById: Map<string, string>
   accounts: Account[]
   categories: Category[]
-  category?: Category
   columnVisibility: TransactionColumnVisibility
   onDelete: () => void
   onUpdate: (patch: TransactionPatch) => void
@@ -462,31 +412,31 @@ function TransactionRow({
   }
 
   return (
-    <tr>
+    <TableRow>
       {columnVisibility.year && (
-        <td>
-          <input
+        <TableCell>
+          <Input
             aria-label="Transaction year"
-            className="table-input year-input"
+            inputSize="sm"
             onBlur={() => saveDate(datePart, year)}
             onChange={(event) => setYear(event.target.value)}
             value={year}
           />
-        </td>
+        </TableCell>
       )}
-      <td>
-        <input
+      <TableCell>
+        <Input
           aria-label="Transaction date"
-          className="table-input short-date-input"
+          inputSize="sm"
           onBlur={() => saveDate()}
           onChange={(event) => setDatePart(event.target.value)}
           value={datePart}
         />
-      </td>
-      <td className="description-cell">
-        <input
+      </TableCell>
+      <TableCell truncate>
+        <Input
           aria-label="Transaction description"
-          className="table-input description-input"
+          inputSize="sm"
           onBlur={() => {
             const next = description.trim()
             if (next && next !== transaction.description) onUpdate({ description: next })
@@ -494,40 +444,35 @@ function TransactionRow({
           onChange={(event) => setDescription(event.target.value)}
           value={description}
         />
-      </td>
-      <td>
-        <input
+      </TableCell>
+      <TableCell align="right">
+        <Input
           aria-label="Transaction amount"
-          className={clsx('table-input amount-input', parseCurrency(amount) && parseCurrency(amount)! > 0 && 'positive', parseCurrency(amount) && parseCurrency(amount)! < 0 && 'negative')}
+          inputSize="sm"
           onBlur={saveAmount}
           onChange={(event) => setAmount(event.target.value)}
           type="text"
           value={amount}
         />
-      </td>
-      <td className="category-cell">
-        <div className="category-chip-wrap">
-          <span className="category-chip" style={{ '--chip-color': category?.color ?? '#737985' } as CSSProperties}>
-            {transaction.category}
-          </span>
-          <select
-            aria-label="Transaction category"
-            className="table-input chip-select"
-            onChange={(event) => onUpdate({ category: event.target.value })}
-            value={transaction.category}
-          >
-            {[...new Set([...categories.map((item) => item.name), transaction.category])].map((categoryName) => (
-              <option key={categoryName}>{categoryName}</option>
-            ))}
-          </select>
-        </div>
-      </td>
+      </TableCell>
+      <TableCell>
+        <Select
+          aria-label="Transaction category"
+          onChange={(event) => onUpdate({ category: event.target.value })}
+          selectSize="sm"
+          value={transaction.category}
+        >
+          {[...new Set([...categories.map((item) => item.name), transaction.category])].map((categoryName) => (
+            <option key={categoryName}>{categoryName}</option>
+          ))}
+        </Select>
+      </TableCell>
       {columnVisibility.account && (
-        <td className="account-cell">
-          <select
+        <TableCell>
+          <Select
             aria-label="Transaction account"
-            className="table-input account-select"
             onChange={(event) => onUpdate({ accountId: event.target.value })}
+            selectSize="sm"
             value={transaction.accountId}
           >
             {accounts.map((account) => (
@@ -535,60 +480,60 @@ function TransactionRow({
                 {accountById.get(account.id)}
               </option>
             ))}
-          </select>
-        </td>
+          </Select>
+        </TableCell>
       )}
       {columnVisibility.tags && (
-        <td className="tags-cell">
-          <details className="tags-editor">
-            <summary aria-label="Edit transaction tags">
-              {selectedTags.length > 0 ? (
-                <span className="tag-chip-list">
-                  {selectedTags.slice(0, 2).map((tag) => (
-                    <span className="tag-chip" key={tag.id} style={{ '--chip-color': tag.color } as CSSProperties}>
-                      {tag.name}
-                    </span>
-                  ))}
-                  {selectedTags.length > 2 && <span className="tag-count">+{selectedTags.length - 2}</span>}
-                </span>
-              ) : (
-                <span className="quiet-cell">Add tags</span>
-              )}
-            </summary>
-            <div className="tag-menu">
+        <TableCell>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" type="button" variant="ghost">
+                {selectedTags.length > 0 ? (
+                  <>
+                    {selectedTags.slice(0, 2).map((tag) => (
+                      <Badge key={tag.id} size="sm" tone="accent">
+                        {tag.name}
+                      </Badge>
+                    ))}
+                    {selectedTags.length > 2 && <Badge size="sm" tone="neutral">+{selectedTags.length - 2}</Badge>}
+                  </>
+                ) : (
+                  'Add tags'
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center">
+              <DropdownMenuLabel>Tags</DropdownMenuLabel>
               {tags.map((tag) => (
-                <label className="tag-option" key={tag.id}>
-                  <input
-                    checked={selectedTagIds.includes(tag.id)}
-                    onChange={(event) => {
-                      const nextTagIds = event.target.checked
-                        ? [...selectedTagIds, tag.id]
-                        : selectedTagIds.filter((tagId) => tagId !== tag.id)
-                      onUpdate({ tagIds: nextTagIds })
-                    }}
-                    type="checkbox"
-                  />
-                  <span className="tag-chip" style={{ '--chip-color': tag.color } as CSSProperties}>
-                    {tag.name}
-                  </span>
-                </label>
+                <DropdownMenuCheckboxItem
+                  checked={selectedTagIds.includes(tag.id)}
+                  key={tag.id}
+                  onCheckedChange={(checked) => {
+                    const nextTagIds = checked === true
+                      ? [...selectedTagIds, tag.id]
+                      : selectedTagIds.filter((tagId) => tagId !== tag.id)
+                    onUpdate({ tagIds: nextTagIds })
+                  }}
+                  onSelect={(event) => event.preventDefault()}
+                >
+                  {tag.name}
+                </DropdownMenuCheckboxItem>
               ))}
-            </div>
-          </details>
-        </td>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </TableCell>
       )}
-      {columnVisibility.source && <td className="quiet-cell">{transaction.source}</td>}
-      <td className="action-cell">
-        <button
-          aria-label={`Delete ${transaction.description}`}
-          className="icon-action danger-action row-action"
+      {columnVisibility.source && <TableCell muted>{transaction.source}</TableCell>}
+      <TableCell align="right">
+        <IconButton
+          label={`Delete ${transaction.description}`}
           onClick={onDelete}
-          title="Delete transaction"
-          type="button"
+          size="sm"
+          variant="ghost"
         >
           <Trash2 size={16} />
-        </button>
-      </td>
-    </tr>
+        </IconButton>
+      </TableCell>
+    </TableRow>
   )
 }

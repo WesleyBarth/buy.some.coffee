@@ -1,4 +1,4 @@
-import { clsx } from 'clsx'
+import { Text } from '@hyperview/ui'
 
 export function MoneyAmount({
   amount,
@@ -18,10 +18,7 @@ export function MoneyAmount({
   const formatted = formatter.format(Math.abs(amount))
   const prefix = neutral ? (amount < 0 ? '-' : '') : amount > 0 ? '+' : amount < 0 ? '-' : ''
 
-  return (
-    <span className={clsx('money-amount', !neutral && amount > 0 && 'positive', !neutral && amount < 0 && 'negative')}>
-      {prefix}
-      {formatted}
-    </span>
-  )
+  const tone = neutral ? 'default' : amount < 0 ? 'danger' : amount > 0 ? 'accent' : 'default'
+
+  return <Text as="span" tone={tone}>{prefix}{formatted}</Text>
 }

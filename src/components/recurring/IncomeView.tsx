@@ -1,7 +1,7 @@
+import { DashboardGrid, DashboardGridItem, DashboardMetric, Stack } from '@hyperview/ui'
 import { Banknote, CreditCard, WalletCards } from 'lucide-react'
 import type { Account, RecurringCashflow } from '../../domain/types'
 import { AccountRequiredPanel } from '../ui/AccountRequiredPanel'
-import { MetricCard, MetricGrid } from '../ui/MetricCard'
 import { MoneyAmount } from '../ui/MoneyAmount'
 import { RecurringModule, type RecurringFormState } from './RecurringModule'
 
@@ -43,12 +43,18 @@ export function IncomeView({
   subscriptionServicesSpend,
 }: IncomeViewProps) {
   return (
-    <section className="view-stack">
-      <MetricGrid>
-        <MetricCard icon={Banknote} label="Expected income" value={<MoneyAmount amount={monthlyRecurringIncome} />} tone="green" />
-        <MetricCard icon={WalletCards} label="Income sources" value={String(expectedIncomeItems.length)} />
-        <MetricCard icon={CreditCard} label="Net fixed flow" value={<MoneyAmount amount={monthlyRecurringFlow - subscriptionServicesSpend} />} />
-      </MetricGrid>
+    <Stack gap="sm">
+      <DashboardGrid columns={12} gap="sm">
+        <DashboardGridItem span={{ base: 12, sm: 6, lg: 3 }}>
+          <DashboardMetric actions={<Banknote size={20} />} label="Expected income" tone="positive" value={<MoneyAmount amount={monthlyRecurringIncome} />} />
+        </DashboardGridItem>
+        <DashboardGridItem span={{ base: 12, sm: 6, lg: 3 }}>
+          <DashboardMetric actions={<WalletCards size={20} />} label="Income sources" value={String(expectedIncomeItems.length)} />
+        </DashboardGridItem>
+        <DashboardGridItem span={{ base: 12, sm: 6, lg: 3 }}>
+          <DashboardMetric actions={<CreditCard size={20} />} label="Net fixed flow" value={<MoneyAmount amount={monthlyRecurringFlow - subscriptionServicesSpend} />} />
+        </DashboardGridItem>
+      </DashboardGrid>
 
       {accounts.length === 0 ? (
         <AccountRequiredPanel onOpenAccounts={onOpenAccounts} />
@@ -70,6 +76,6 @@ export function IncomeView({
           title="Income"
         />
       )}
-    </section>
+    </Stack>
   )
 }

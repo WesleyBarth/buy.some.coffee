@@ -1,8 +1,8 @@
 import type { RefObject } from 'react'
+import { DashboardGrid, DashboardGridItem, DashboardMetric, Stack } from '@hyperview/ui'
 import { CreditCard, Repeat2, WalletCards } from 'lucide-react'
 import type { Account, RecurringCashflow } from '../../domain/types'
 import { AccountRequiredPanel } from '../ui/AccountRequiredPanel'
-import { MetricCard, MetricGrid } from '../ui/MetricCard'
 import { MoneyAmount } from '../ui/MoneyAmount'
 import { RecurringModule } from './RecurringModule'
 
@@ -46,12 +46,18 @@ export function ExpensesView({
   subscriptionServicesSpend,
 }: ExpensesViewProps) {
   return (
-    <section className="view-stack">
-      <MetricGrid className="expense-metrics">
-        <MetricCard icon={CreditCard} label="Expected expenses" value={<MoneyAmount amount={-expectedExpenseSpend} />} tone="amber" />
-        <MetricCard icon={Repeat2} label="Monthly recurring" value={<MoneyAmount amount={-monthlyRecurringSpend} />} tone="amber" />
-        <MetricCard icon={WalletCards} label="Subscriptions/services" value={<MoneyAmount amount={-subscriptionServicesSpend} />} tone="amber" />
-      </MetricGrid>
+    <Stack gap="sm">
+      <DashboardGrid columns={12} gap="sm">
+        <DashboardGridItem span={{ base: 12, sm: 6, lg: 3 }}>
+          <DashboardMetric actions={<CreditCard size={20} />} label="Expected expenses" tone="warning" value={<MoneyAmount amount={-expectedExpenseSpend} />} />
+        </DashboardGridItem>
+        <DashboardGridItem span={{ base: 12, sm: 6, lg: 3 }}>
+          <DashboardMetric actions={<Repeat2 size={20} />} label="Monthly recurring" tone="warning" value={<MoneyAmount amount={-monthlyRecurringSpend} />} />
+        </DashboardGridItem>
+        <DashboardGridItem span={{ base: 12, sm: 6, lg: 3 }}>
+          <DashboardMetric actions={<WalletCards size={20} />} label="Subscriptions/services" tone="warning" value={<MoneyAmount amount={-subscriptionServicesSpend} />} />
+        </DashboardGridItem>
+      </DashboardGrid>
 
       {accounts.length === 0 ? (
         <AccountRequiredPanel onOpenAccounts={onOpenAccounts} />
@@ -91,6 +97,6 @@ export function ExpensesView({
           />
         </>
       )}
-    </section>
+    </Stack>
   )
 }

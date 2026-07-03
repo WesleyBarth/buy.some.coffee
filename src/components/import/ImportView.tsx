@@ -1,8 +1,28 @@
+import {
+  Button,
+  Checkbox,
+  Field,
+  Inline,
+  Input,
+  Label,
+  Panel,
+  PanelBody,
+  PanelHeader,
+  Select,
+  Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableFrame,
+  TableHead,
+  TableHeaderCell,
+  TableRow,
+  Text,
+} from '@hyperview/ui'
 import { ArrowDownToLine } from 'lucide-react'
 import type { Account, CsvPreviewRow } from '../../domain/types'
 import { AccountRequiredPanel } from '../ui/AccountRequiredPanel'
 import { MoneyAmount } from '../ui/MoneyAmount'
-import { DataTable, TablePanel } from '../ui/Table'
 
 type ImportViewProps = {
   accounts: Account[]
@@ -30,91 +50,100 @@ export function ImportView({
   const selectedRowCount = csvRows.filter((row) => row.shouldImport).length
 
   return (
-    <section className="view-stack">
+    <Stack gap="sm">
       {accounts.length === 0 ? (
         <AccountRequiredPanel onOpenAccounts={onOpenAccounts} />
       ) : (
-        <section className="panel import-panel">
-          <div>
-            <h2>CSV import</h2>
-            <p>
-              Upload exports with date, description, and amount columns. Debit/credit columns are also supported.
-            </p>
-          </div>
-          <div className="import-controls">
-            <label>
-              Destination account
-              <select onChange={(event) => onSelectedAccountChange(event.target.value)} value={selectedAccountId}>
+        <Panel>
+          <PanelHeader
+            description="Upload exports with date, description, and amount columns. Debit/credit columns are also supported."
+            heading="CSV import"
+          />
+          <PanelBody padding="sm">
+          <Inline align="end" gap="sm" wrap>
+            <Field>
+              <Label>Destination account</Label>
+              <Select
+                onChange={(event) => onSelectedAccountChange(event.target.value)}
+                selectSize="sm"
+                value={selectedAccountId}
+              >
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.name}
                   </option>
                 ))}
-              </select>
-            </label>
-            <label className="file-picker">
-              <ArrowDownToLine size={18} />
-              Choose CSV
-              <input
+              </Select>
+            </Field>
+            <Field>
+              <Label>CSV file</Label>
+              <Input
                 accept=".csv,text/csv"
+                inputSize="sm"
                 onChange={(event) => {
                   const file = event.target.files?.[0]
                   if (file) onParseCsv(file)
                 }}
                 type="file"
               />
-            </label>
-            <button
-              className="primary-action"
-              disabled={selectedRowCount === 0}
-              onClick={onImportRows}
-              type="button"
-            >
+            </Field>
+            <Button disabled={selectedRowCount === 0} onClick={onImportRows} size="sm">
+              <ArrowDownToLine size={18} />
               Import {selectedRowCount || ''} rows
-            </button>
-          </div>
-        </section>
+            </Button>
+          </Inline>
+          </PanelBody>
+        </Panel>
       )}
       {csvRows.length > 0 && (
-        <TablePanel subtitle="Duplicates skipped on import" title="Preview">
-          <DataTable
-            columns={[
-              { label: 'Import' },
-              { label: 'Date' },
-              { label: 'Description' },
-              { label: 'Category' },
-              { className: 'amount-cell', label: 'Amount' },
-            ]}
-          >
+        <TableFrame
+          density="compact"
+          heading="Preview"
+          toolbar={<Text size="sm" tone="muted">Duplicates skipped on import</Text>}
+        >
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableHeaderCell>Import</TableHeaderCell>
+                <TableHeaderCell>Date</TableHeaderCell>
+                <TableHeaderCell>Description</TableHeaderCell>
+                <TableHeaderCell>Category</TableHeaderCell>
+                <TableHeaderCell align="right">Amount</TableHeaderCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
             {csvRows.slice(0, 20).map((row) => (
-              <tr className={!row.shouldImport ? 'muted-row' : ''} key={row.id}>
-                <td>
-                  <input
+              <TableRow selected={row.shouldImport} key={row.id}>
+                <TableCell>
+                  <Checkbox
+                    aria-label={`Import ${row.description}`}
                     checked={row.shouldImport}
                     onChange={(event) => onUpdateCsvRow(row.id, { shouldImport: event.target.checked })}
-                    type="checkbox"
                   />
-                </td>
-                <td>{row.date}</td>
-                <td>{row.description}</td>
-                <td>
-                  <select
+                </TableCell>
+                <TableCell>{row.date}</TableCell>
+                <TableCell>{row.description}</TableCell>
+                <TableCell>
+                  <Select
+                    aria-label={`Category for ${row.description}`}
                     onChange={(event) => onUpdateCsvRow(row.id, { category: event.target.value })}
+                    selectSize="sm"
                     value={row.category}
                   >
                     {[...new Set([...categoryLabels, row.category])].map((category) => (
                       <option key={category}>{category}</option>
                     ))}
-                  </select>
-                </td>
-                <td className="amount-cell">
+                  </Select>
+                </TableCell>
+                <TableCell align="right">
                   <MoneyAmount amount={row.amount} />
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </DataTable>
-        </TablePanel>
+            </TableBody>
+          </Table>
+        </TableFrame>
       )}
-    </section>
+    </Stack>
   )
 }
