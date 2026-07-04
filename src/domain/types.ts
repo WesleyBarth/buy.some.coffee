@@ -176,6 +176,8 @@ export type PlaidTransactionPreview = {
   originalDescription?: string
   amount: number
   category: string
+  modeledOutcome: PlaidModeledOutcome
+  transferGroupId?: string
   pending: boolean
   shouldImport: boolean
   duplicate: boolean

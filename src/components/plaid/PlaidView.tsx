@@ -1,6 +1,6 @@
+import { Fragment, useState } from 'react'
 import {
   Button,
-  Checkbox,
   DashboardGrid,
   DashboardGridItem,
   DashboardMetric,
@@ -20,6 +20,7 @@ import {
   TableHead,
   TableHeaderCell,
   TableRow,
+  TableSortableHeaderCell,
   TableToolbar,
   Text,
   Toolbar,
@@ -28,6 +29,7 @@ import {
 import { ArrowDownToLine, Landmark, RefreshCw, Save, ShieldCheck, Trash2, WalletCards } from 'lucide-react'
 import type { Account, PlaidAccountPreview, PlaidTransactionPreview, PlaidTransactionPreviewStats } from '../../domain/types'
 import { currency } from '../../domain/defaults'
+import { hasReviewBlockingPlaidRows, plaidActionLabel, plaidRowReasonLabel, shouldImportPlaidPreviewRow } from '../../domain/plaid'
 import { MoneyAmount } from '../ui/MoneyAmount'
 
 type PlaidConnection = {
@@ -63,6 +65,12 @@ type PlaidViewProps = {
   working: boolean
 }
 
+type PlaidTransactionSortKey = 'action' | 'update' | 'date' | 'account' | 'description' | 'amount' | 'category' | 'reason'
+type PlaidTransactionSortState = {
+  key: PlaidTransactionSortKey
+  direction: 'asc' | 'desc'
+}
+
 export function PlaidView({
   accounts,
   balanceStatusByAccountId,
@@ -89,7 +97,26 @@ export function PlaidView({
   transactionRows,
   working,
 }: PlaidViewProps) {
-  const selectedTransactionCount = transactionRows.filter((row) => row.shouldImport).length
+  const [transactionSort, setTransactionSort] = useState<PlaidTransactionSortState>({
+    key: 'amount',
+    direction: 'asc',
+  })
+  const accountById = new Map(accounts.map((account) => [account.id, account.name]))
+  const selectedTransactionCount = transactionRows.filter(shouldImportPlaidPreviewRow).length
+  const reviewBlockingCount = transactionRows.filter((row) => !row.pending && row.modeledOutcome === 'needs_review').length
+  const hasReviewBlockingRows = hasReviewBlockingPlaidRows(transactionRows)
+  const groupedTransactionRows = groupPlaidTransactionRows(transactionRows, transactionSort, accountById)
+
+  function updateTransactionSort(key: PlaidTransactionSortKey) {
+    setTransactionSort((current) => {
+      if (current.key !== key) return { key, direction: 'asc' }
+      return { key, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+    })
+  }
+
+  function transactionSortDirection(key: PlaidTransactionSortKey) {
+    return transactionSort.key === key ? transactionSort.direction : null
+  }
 
   return (
     <LoadingOverlay active={working} label={busyMessage || 'Working'}>
@@ -236,7 +263,7 @@ export function PlaidView({
               <TableHeaderCell>Available</TableHeaderCell>
               <TableHeaderCell>Current</TableHeaderCell>
               <TableHeaderCell>Mapped account</TableHeaderCell>
-              <TableHeaderCell>Status</TableHeaderCell>
+              <TableHeaderCell>Reason</TableHeaderCell>
               <TableHeaderCell>Last refresh</TableHeaderCell>
             </TableRow>
           </TableHead>
@@ -292,7 +319,7 @@ export function PlaidView({
                 <Text size="sm" tone="muted">
                   {transactionRows.length === 0
                     ? 'No preview loaded'
-                    : `${selectedTransactionCount} selected; ${transactionPreviewStats.added} added, ${transactionPreviewStats.modified} modified, ${transactionPreviewStats.removed} removed`}
+                    : `${selectedTransactionCount} ready to import; ${reviewBlockingCount} need action; ${transactionPreviewStats.added} added, ${transactionPreviewStats.modified} modified, ${transactionPreviewStats.removed} removed`}
                 </Text>
               </ToolbarGroup>
               <ToolbarGroup separated>
@@ -305,20 +332,20 @@ export function PlaidView({
                   Preview transactions
                 </Button>
                 <Button
-                  disabled={working || selectedTransactionCount === 0}
+                  disabled={working || selectedTransactionCount === 0 || hasReviewBlockingRows}
                   onClick={onImportTransactions}
                   size="sm"
                 >
                   <ArrowDownToLine size={16} />
-                  Import selected
+                  Import ready
                 </Button>
                 <Button
-                  disabled={working || transactionCursorCount === 0}
+                  disabled={working || transactionCursorCount === 0 || hasReviewBlockingRows}
                   onClick={onMarkTransactionsReviewed}
                   size="sm"
                 >
                   <Save size={16} />
-                  Mark reviewed
+                  Commit cursor
                 </Button>
               </ToolbarGroup>
             </Toolbar>
@@ -328,58 +355,95 @@ export function PlaidView({
         <Table>
           <TableHead>
             <TableRow>
-              <TableHeaderCell>Import</TableHeaderCell>
-              <TableHeaderCell>Update</TableHeaderCell>
-              <TableHeaderCell>Date</TableHeaderCell>
-              <TableHeaderCell>Account</TableHeaderCell>
-              <TableHeaderCell>Description</TableHeaderCell>
-              <TableHeaderCell>Amount</TableHeaderCell>
-              <TableHeaderCell>Category</TableHeaderCell>
-              <TableHeaderCell>Status</TableHeaderCell>
+              <TableSortableHeaderCell direction={transactionSortDirection('action')} onSort={() => updateTransactionSort('action')}>
+                Action
+              </TableSortableHeaderCell>
+              <TableSortableHeaderCell direction={transactionSortDirection('update')} onSort={() => updateTransactionSort('update')}>
+                Update
+              </TableSortableHeaderCell>
+              <TableSortableHeaderCell direction={transactionSortDirection('date')} onSort={() => updateTransactionSort('date')}>
+                Date
+              </TableSortableHeaderCell>
+              <TableSortableHeaderCell direction={transactionSortDirection('account')} onSort={() => updateTransactionSort('account')}>
+                Account
+              </TableSortableHeaderCell>
+              <TableSortableHeaderCell direction={transactionSortDirection('description')} onSort={() => updateTransactionSort('description')}>
+                Description
+              </TableSortableHeaderCell>
+              <TableSortableHeaderCell align="right" direction={transactionSortDirection('amount')} onSort={() => updateTransactionSort('amount')}>
+                Amount
+              </TableSortableHeaderCell>
+              <TableSortableHeaderCell direction={transactionSortDirection('category')} onSort={() => updateTransactionSort('category')}>
+                Category
+              </TableSortableHeaderCell>
+              <TableSortableHeaderCell direction={transactionSortDirection('reason')} onSort={() => updateTransactionSort('reason')}>
+                Reason
+              </TableSortableHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>
           {transactionRows.length === 0 ? (
             <TableEmptyRow colSpan={8} title="Preview Plaid transactions after mapping accounts." />
           ) : (
-            transactionRows.slice(0, 100).map((row) => (
-              <TableRow selected={row.duplicate || row.pending} key={row.id}>
-                <TableCell>
-                  <Checkbox
-                    aria-label={`Import ${row.description}`}
-                    checked={row.shouldImport}
-                    disabled={row.duplicate || row.pending}
-                    onChange={(event) => onUpdateTransactionRow(row.id, { shouldImport: event.target.checked })}
-                  />
-                </TableCell>
-                <TableCell muted>{row.updateType === 'modified' ? 'Modified' : 'Added'}</TableCell>
-                <TableCell>{row.date}</TableCell>
-                <TableCell>{accounts.find((account) => account.id === row.accountId)?.name ?? row.plaidAccountName}</TableCell>
-                <TableCell>
-                  <Text weight="semibold">{row.description}</Text>
-                  {row.originalDescription && row.originalDescription !== row.description && (
-                    <Text size="xs" tone="muted">{row.originalDescription}</Text>
-                  )}
-                  {row.pendingTransactionId && (
-                    <Text size="xs" tone="muted">Posted from pending transaction</Text>
-                  )}
-                </TableCell>
-                <TableCell align="right">
-                  <MoneyAmount amount={row.amount} />
-                </TableCell>
-                <TableCell>
-                  <Select
-                    onChange={(event) => onUpdateTransactionRow(row.id, { category: event.target.value })}
-                    selectSize="sm"
-                    value={row.category}
-                  >
-                    {categoryLabels.map((category) => (
-                      <option key={category}>{category}</option>
-                    ))}
-                  </Select>
-                </TableCell>
-                <TableCell>{row.pending ? 'Pending' : row.duplicate ? 'Already imported' : row.updateType === 'modified' ? 'Modified' : 'Ready'}</TableCell>
-              </TableRow>
+            groupedTransactionRows.map((group) => (
+              group.rows.length > 0 && (
+                <Fragment key={group.key}>
+                  <TableRow selected={group.key === 'not-ready'}>
+                    <TableCell colSpan={8}>
+                      <Text size="sm" weight="semibold">{group.label}</Text>
+                    </TableCell>
+                  </TableRow>
+                  {group.rows.map((row) => (
+                    <TableRow selected={row.modeledOutcome !== 'import'} key={row.id}>
+                      <TableCell>
+                        <Select
+                          aria-label={`Import action for ${row.description}`}
+                          onChange={(event) =>
+                            onUpdateTransactionRow(row.id, {
+                              modeledOutcome: event.target.value as PlaidTransactionPreview['modeledOutcome'],
+                            })
+                          }
+                          selectSize="sm"
+                          value={row.modeledOutcome}
+                        >
+                          <option value="import">Import as transaction</option>
+                          <option value="duplicate">Skip duplicate</option>
+                          <option value="credit_card_payment">Import as credit card payment</option>
+                          <option value="internal_transfer">Import as transfer</option>
+                          <option value="needs_review">{row.pending ? 'Pending - skip for now' : 'Review first'}</option>
+                        </Select>
+                      </TableCell>
+                      <TableCell muted>{row.updateType === 'modified' ? 'Modified' : 'Added'}</TableCell>
+                      <TableCell>{row.date}</TableCell>
+                      <TableCell>{accountById.get(row.accountId) ?? row.plaidAccountName}</TableCell>
+                      <TableCell>
+                        <Text weight="semibold">{row.description}</Text>
+                        {row.originalDescription && row.originalDescription !== row.description && (
+                          <Text size="xs" tone="muted">{row.originalDescription}</Text>
+                        )}
+                        {row.pendingTransactionId && (
+                          <Text size="xs" tone="muted">Posted from pending transaction</Text>
+                        )}
+                      </TableCell>
+                      <TableCell align="right">
+                        <MoneyAmount amount={row.amount} />
+                      </TableCell>
+                      <TableCell>
+                        <Select
+                          onChange={(event) => onUpdateTransactionRow(row.id, { category: event.target.value })}
+                          selectSize="sm"
+                          value={row.category}
+                        >
+                          {categoryLabels.map((category) => (
+                            <option key={category}>{category}</option>
+                          ))}
+                        </Select>
+                      </TableCell>
+                      <TableCell>{plaidRowReasonLabel(row)}</TableCell>
+                    </TableRow>
+                  ))}
+                </Fragment>
+              )
             ))
           )}
           </TableBody>
@@ -402,4 +466,72 @@ function formatShortDateTime(value: string | undefined) {
     hour: 'numeric',
     minute: '2-digit',
   }).format(new Date(value))
+}
+
+function groupPlaidTransactionRows(
+  rows: PlaidTransactionPreview[],
+  sort: PlaidTransactionSortState,
+  accountById: Map<string, string>,
+) {
+  const notReadyRows: PlaidTransactionPreview[] = []
+  const readyRows: PlaidTransactionPreview[] = []
+
+  for (const row of rows.slice(0, 100)) {
+    if (shouldImportPlaidPreviewRow(row)) {
+      readyRows.push(row)
+    } else {
+      notReadyRows.push(row)
+    }
+  }
+
+  return [
+    { key: 'not-ready', label: 'Not ready', rows: sortPlaidTransactionRows(notReadyRows, sort, accountById) },
+    { key: 'ready', label: 'Ready', rows: sortPlaidTransactionRows(readyRows, sort, accountById) },
+  ] as const
+}
+
+function sortPlaidTransactionRows(
+  rows: PlaidTransactionPreview[],
+  sort: PlaidTransactionSortState,
+  accountById: Map<string, string>,
+) {
+  return rows.toSorted((left, right) => {
+    const result = comparePlaidTransactionRows(left, right, sort.key, accountById)
+    return sort.direction === 'asc' ? result : -result
+  })
+}
+
+function comparePlaidTransactionRows(
+  left: PlaidTransactionPreview,
+  right: PlaidTransactionPreview,
+  key: PlaidTransactionSortKey,
+  accountById: Map<string, string>,
+): number {
+  switch (key) {
+    case 'action':
+      return compareText(plaidActionLabel(left.modeledOutcome), plaidActionLabel(right.modeledOutcome)) || comparePlaidTransactionRows(left, right, 'amount', accountById)
+    case 'update':
+      return compareText(left.updateType ?? '', right.updateType ?? '') || comparePlaidTransactionRows(left, right, 'amount', accountById)
+    case 'date':
+      return compareText(left.date, right.date) || comparePlaidTransactionRows(left, right, 'amount', accountById)
+    case 'account':
+      return compareText(
+        accountById.get(left.accountId) ?? left.plaidAccountName ?? '',
+        accountById.get(right.accountId) ?? right.plaidAccountName ?? '',
+      )
+    case 'description':
+      return compareText(left.description, right.description)
+    case 'amount':
+      return left.amount - right.amount || compareText(left.date, right.date) || compareText(left.description, right.description)
+    case 'category':
+      return compareText(left.category, right.category) || comparePlaidTransactionRows(left, right, 'amount', accountById)
+    case 'reason':
+      return compareText(plaidRowReasonLabel(left), plaidRowReasonLabel(right)) || comparePlaidTransactionRows(left, right, 'amount', accountById)
+    default:
+      return 0
+  }
+}
+
+function compareText(left: string, right: string) {
+  return left.localeCompare(right, undefined, { numeric: true, sensitivity: 'base' })
 }

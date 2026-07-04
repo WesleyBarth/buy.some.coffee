@@ -98,6 +98,13 @@ import {
 import { buildMonthPositionTrend, buildSpendByCategory } from './domain/dashboard'
 import { buildMonthlyCashSummary } from './domain/cashflow'
 import { parseCurrency } from './domain/money'
+import {
+  detectPlaidTransferOutcomes,
+  hasReviewBlockingPlaidRows,
+  initialPlaidModeledOutcome,
+  roleForPlaidModeledOutcome,
+  shouldImportPlaidPreviewRow,
+} from './domain/plaid'
 import { normalizeRecurringCashflow } from './domain/recurring'
 import { isBudgetSpend } from './domain/transactions'
 import type {
@@ -1605,6 +1612,7 @@ function App() {
             ),
           ) || existingPlaidTransactionIds.has(transaction.plaid_transaction_id)
 
+          const modeledOutcome = initialPlaidModeledOutcome({ duplicate, pending: transaction.pending })
           rows.push({
             id: transaction.plaid_transaction_id,
             updateType: transaction.update_type,
@@ -1619,18 +1627,20 @@ function App() {
             originalDescription: transaction.original_description,
             amount: transaction.amount,
             category,
+            modeledOutcome,
             pending: transaction.pending,
-            shouldImport: !duplicate && !transaction.pending,
+            shouldImport: modeledOutcome === 'import',
             duplicate,
           })
         }
       }
 
-      rows.sort((a, b) => b.date.localeCompare(a.date))
-      setPlaidTransactionRows(rows)
+      const modeledRows = detectPlaidTransferOutcomes(rows, accounts)
+      modeledRows.sort((a, b) => b.date.localeCompare(a.date))
+      setPlaidTransactionRows(modeledRows)
       setPlaidTransactionCursors(nextCursors)
       setPlaidTransactionPreviewStats(previewStats)
-      setNotice(`Previewed ${rows.length} Plaid transaction update${rows.length === 1 ? '' : 's'}.`)
+      setNotice(`Previewed ${modeledRows.length} Plaid transaction update${modeledRows.length === 1 ? '' : 's'}.`)
     } catch (error) {
       setAppError(errorMessage(error, 'Unable to preview Plaid transactions.'))
     } finally {
@@ -1639,7 +1649,16 @@ function App() {
   }
 
   function updatePlaidTransactionRow(rowId: string, patch: Partial<PlaidTransactionPreview>) {
-    setPlaidTransactionRows((current) => current.map((row) => (row.id === rowId ? { ...row, ...patch } : row)))
+    setPlaidTransactionRows((current) =>
+      current.map((row) => {
+        if (row.id !== rowId) return row
+        const next = { ...row, ...patch }
+        if (patch.modeledOutcome) {
+          next.shouldImport = shouldImportPlaidPreviewRow(next)
+        }
+        return next
+      }),
+    )
   }
 
   async function commitPlaidTransactionCursors() {
@@ -1663,6 +1682,10 @@ function App() {
       return
     }
     if (Object.keys(plaidTransactionCursors).length === 0) return
+    if (hasReviewBlockingPlaidRows(plaidTransactionRows)) {
+      setAppError('Resolve Plaid transaction rows marked Review first before committing the cursor.')
+      return
+    }
 
     startPlaidBusy('Marking Plaid preview reviewed...')
     setAppError('')
@@ -1687,8 +1710,12 @@ function App() {
       return
     }
 
-    const rowsToImport = plaidTransactionRows.filter((row) => row.shouldImport && !row.duplicate && !row.pending)
+    const rowsToImport = plaidTransactionRows.filter(shouldImportPlaidPreviewRow)
     if (rowsToImport.length === 0) return
+    if (hasReviewBlockingPlaidRows(plaidTransactionRows)) {
+      setAppError('Resolve Plaid transaction rows marked Review first before importing ready rows.')
+      return
+    }
 
     startPlaidBusy('Importing Plaid transactions...')
     setAppError('')
@@ -1711,7 +1738,9 @@ function App() {
           external_id: row.plaidTransactionId,
           pending_external_id: row.pendingTransactionId,
           original_description: row.originalDescription ?? null,
-          modeled_outcome: 'import',
+          role: roleForPlaidModeledOutcome(row.modeledOutcome),
+          transfer_group_id: row.transferGroupId,
+          modeled_outcome: row.modeledOutcome,
           dedupe_key: transactionDedupeKey(row.accountId, row.date, row.amount, row.description),
           notes: row.originalDescription ? `Plaid original: ${row.originalDescription}` : null,
         })),
